@@ -170,7 +170,8 @@ final class SelectBuilder<R> {
     return this;
   }
 
-  SelectBuilder<R> onTimer(Duration d, Future<R> Function() body, {Object? tag}) {
+  SelectBuilder<R> onTimer(Duration d, Future<R> Function() body,
+      {Object? tag}) {
     return onFuture<void>(Future<void>.delayed(d), (_) => body(),
         tag: tag ?? 'timer($d)');
   }

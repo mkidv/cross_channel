@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:isolate';
 import 'package:cross_channel/isolate_extension.dart';
 import 'package:cross_channel/mpsc.dart';
-import 'package:cross_channel/src/core.dart';
 import 'utils.dart';
 
 /// "Simple" worker

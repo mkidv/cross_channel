@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:isolate';
 import 'package:cross_channel/isolate_extension.dart';
 import 'package:cross_channel/mpmc.dart';
-import 'package:cross_channel/src/core.dart';
 import 'package:test/test.dart';
 
 import 'utils.dart';
