@@ -1,0 +1,21 @@
+# Dart / Flutter
+.dart_tool/
+build/
+doc/api/
+.pub-cache/
+pubspec.lock
+
+# Logs / coverage
+coverage/
+lcov.info
+*.log
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Bench
+bench/

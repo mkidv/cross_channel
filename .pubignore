@@ -1,4 +1,9 @@
 bench/
-bench/*
 bench_lite.ps1
 bench.ps1
+
+.github/
+.vscode/
+.idea/
+coverage/
+doc/api/

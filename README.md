@@ -1,3 +1,18 @@
+<p align="center">
+  <a href="LICENSE">
+    <img alt="License" src="https://img.shields.io/github/license/mkidv/cross_channel">
+  </a>
+  <a href="https://pub.dev/packages/cross_channel">
+    <img alt="pub.dev" src="https://img.shields.io/pub/v/cross_channel?label=pub.dev">
+  </a>
+  <a href="https://pub.dev/packages/cross_channel/score">
+    <img alt="pub points" src="https://img.shields.io/pub/points/cross_channel">
+  </a>
+  <a href="https://github.com/mkidv/cross_channel/actions">
+    <img alt="CI" src="https://github.com/mkidv/cross_channel/actions/workflows/dart.yml/badge.svg">
+  </a>
+</p>
+
 # cross_channel
 
 Fast & flexible channels for Dart/Flutter.  
