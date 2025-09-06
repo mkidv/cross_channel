@@ -38,10 +38,11 @@ void echoWorker(SendPort handshake) {
 
 void main() {
   group('Isolate bridge', () {
-    test('oneshot RPC + bounded events via mpscFromReceivePort', () async {
+    test('request/reply + bounded events via ReceivePort.toMpsc', () async {
       final handshake = ReceivePort();
       final isolate = await Isolate.spawn(echoWorker, handshake.sendPort);
       final cmd = await handshake.first as SendPort;
+      handshake.close();
 
       final statusPort = ReceivePort();
       final (_, statusRx) =
@@ -62,9 +63,10 @@ void main() {
 
       // Collect briefly using recvAll with a small idle window (no subscription juggling)
       cmd.sendCmd('burst', data: {'n': 2000});
-      final got = await statusRx.recvAll(idle: const Duration(milliseconds: 1));
+      final seen =
+          await statusRx.recvAll(idle: const Duration(milliseconds: 1));
       // we should have at least one tick, but not necessarily 2000 (cap/drops)
-      expect(got.any((e) => e['type'] == 'tick'), isTrue);
+      expect(seen.any((e) => e['type'] == 'tick'), isTrue);
 
       // clean
       cmd.sendCmd('exit');
@@ -73,10 +75,11 @@ void main() {
       isolate.kill(priority: Isolate.immediate);
     });
 
-    test('oneshotCall times out on unknown/ignored command', () async {
+    test('request times out on unknown/ignored command', () async {
       final handshake = ReceivePort();
       final isolate = await Isolate.spawn(echoWorker, handshake.sendPort);
       final cmd = await handshake.first as SendPort;
+      handshake.close();
 
       // send an unhandled RPC (worker ignores anything but "echo")
       expect(
@@ -95,11 +98,12 @@ void main() {
     });
 
     test(
-      'mpmcFromReceivePort: work-sharing across multiple local consumers',
+      'ReceivePort.toMpmc: work-sharing across multiple local consumers',
       () async {
         final handshake = ReceivePort();
         final isolate = await Isolate.spawn(echoWorker, handshake.sendPort);
         final cmd = await handshake.first as SendPort;
+        handshake.close();
 
         final statusPort = ReceivePort();
         final (mpmcTx, mpmcRx0) =

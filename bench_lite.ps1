@@ -14,11 +14,12 @@ foreach ($t in $targets) {
   if (-not $map.ContainsKey($t)) { throw "Unknown target '$t'." }
   $src = $map[$t]
   $out = "bench\${t}_bench.exe"
-
-  Write-Host "Compiling $src at $out" -ForegroundColor Cyan
   dart compile exe $src -o $out
   if ($LASTEXITCODE -ne 0) { throw "compile failed" }
+}
 
+foreach ($t in $targets) {
+  $out = "bench\${t}_bench.exe"
   Write-Host "Running $out $Count" -ForegroundColor Green
   $args = @("$Count")
   & $out @args

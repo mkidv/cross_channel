@@ -3,13 +3,9 @@ import 'package:cross_channel/mpsc.dart';
 import 'utils.dart';
 
 Future<void> main(List<String> args) async {
-  final iters = args.isNotEmpty && !args.contains('--csv')
-      ? int.parse(args[0])
-      : 2_000_000;
+  final (iters, csv, exp) = parseArgs(args);
 
-  final csv = args.contains('--csv');
-
-  // Quick warmup for JIT
+  // Warmup
   await _benchPingPong(1, 200_000, 'warmup');
 
   final results = <Stats>[];
@@ -80,10 +76,10 @@ Future<Stats> _benchPingPong(int capacity, int iters, String label) async {
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         remaining--;
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }
@@ -92,7 +88,7 @@ Future<Stats> _benchPingPong(int capacity, int iters, String label) async {
   final sendLoop = () async {
     for (var i = 0; i < iters; i++) {
       final s = await tx.send(i);
-      if (s.disconnected) break;
+      if (s.isDisconnected) break;
     }
     tx.close();
   }();
@@ -122,10 +118,10 @@ Future<Stats> _benchPipeline(
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         received++;
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }
@@ -134,7 +130,7 @@ Future<Stats> _benchPipeline(
   final sendLoop = () async {
     for (var i = 0; i < iters; i++) {
       final s = await tx.send(i);
-      if (s.disconnected) break;
+      if (s.isDisconnected) break;
     }
     tx.close();
   }();
@@ -154,7 +150,6 @@ Future<Stats> _benchMultiProducers(
 ) async {
   final (tx0, rx) = Mpsc.bounded<int>(capacity);
 
-  // Clones
   final senders = <MpscSender<int>>[tx0];
   for (var i = 1; i < producers; i++) {
     senders.add(senders.first.clone());
@@ -171,10 +166,10 @@ Future<Stats> _benchMultiProducers(
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         received++;
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }
@@ -186,7 +181,7 @@ Future<Stats> _benchMultiProducers(
     senderTasks.add(() async {
       for (var k = 0; k < itersPerProducer; k++) {
         final res = await s.send(k);
-        if (res.disconnected) break;
+        if (res.isDisconnected) break;
       }
       s.close();
     }());
@@ -222,10 +217,10 @@ Future<Stats> _benchSliding(
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         received++;
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }
@@ -233,10 +228,8 @@ Future<Stats> _benchSliding(
 
   final sendLoop = () async {
     for (var i = 0; i < iters; i++) {
-      // simulate producer faster than consumer to trigger drops
       final res = tx.trySend(i);
-      if (res.full) {
-        // back off a bit to avoid saturating the loop too unfairly
+      if (res.isFull) {
         await tx.send(i);
       }
     }
@@ -269,7 +262,7 @@ Future<Stats> _benchLatestOnly(int iters, String label) async {
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         received++;
 
@@ -280,7 +273,7 @@ Future<Stats> _benchLatestOnly(int iters, String label) async {
             x ^= i * i;
           }
         }
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }

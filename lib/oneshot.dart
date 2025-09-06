@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:cross_channel/src/buffer.dart';
+import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/core.dart';
 import 'package:cross_channel/src/result.dart';
 
@@ -48,17 +48,25 @@ final class OneShotSender<T> implements Sender<T> {
   OneShotSender._(this._core);
   final _OneShotCore<T> _core;
 
+  @pragma('vm:prefer-inline')
   @override
-  Future<SendResult<T>> send(T value) async => _core.send(value);
+  bool get isDisconnected => _core.sendDisconnected;
+
+  @override
+  Future<SendResult> send(T value) async => _core.send(value);
 
   @pragma('vm:prefer-inline')
   @override
-  SendResult<T> trySend(T value) => _core.trySend(value);
+  SendResult trySend(T value) => _core.trySend(value);
 }
 
 final class OneShotReceiver<T> implements Receiver<T> {
   OneShotReceiver._(this._core);
   final _OneShotCore<T> _core;
+
+  @pragma('vm:prefer-inline')
+  @override
+  bool get isDisconnected => _core.recvDisconnected;
 
   @override
   Future<RecvResult<T>> recv() => _core.recv();
@@ -66,4 +74,8 @@ final class OneShotReceiver<T> implements Receiver<T> {
   @pragma('vm:prefer-inline')
   @override
   RecvResult<T> tryRecv() => _core.tryRecv();
+
+  @override
+  (Future<RecvResult<T>>, void Function()) recvCancelable() =>
+      _core.recvCancelable();
 }

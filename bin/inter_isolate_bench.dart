@@ -43,21 +43,15 @@ void rawWorker(SendPort handshake) {
 }
 
 Future<void> main(List<String> args) async {
-  final iters = args.isNotEmpty && !args[0].contains('--csv')
-      ? int.parse(args[0])
-      : 50_000;
-  final payloadIters = args.length > 1 && !args[1].contains('--csv')
-      ? int.parse(args[1])
-      : 10_000;
-  final payloadBytes = args.length > 2 && !args[2].contains('--csv')
-      ? int.parse(args[2])
-      : 16_384; // 16 KB
+  final (iters, csv, _) = parseArgs(args);
 
-  final csv = args.contains('--csv');
+  final payloadIters = 10_000;
+  final payloadBytes = 16_384; // 16 KB
 
   final handshake = ReceivePort();
   final iso = await Isolate.spawn(rawWorker, handshake.sendPort);
   final cmd = await handshake.first as SendPort;
+  handshake.close();
 
   final status = ReceivePort();
   cmd.send({'setStatus': status.sendPort});
@@ -78,7 +72,7 @@ Future<void> main(List<String> args) async {
     cmd,
     payloadIters,
     payloadBytes,
-    'SendPort roundtrip Uint8List (${_fmtBytes(payloadBytes)})',
+    'SendPort roundtrip Uint8List (${payloadBytes.bytesToPrettyString()})',
   ));
 
   results.add(await _benchRawBurst(
@@ -103,7 +97,6 @@ Future<void> main(List<String> args) async {
   }
 
   print('\n=== INTER-ISOLATE Bench (Dart VM) ===');
-  print('\n=== ONESHOT Bench (Dart VM) ===');
   for (final r in results) {
     print(r.toString());
   }
@@ -184,10 +177,4 @@ Future<Stats> _benchRawBurst(
   await sub.cancel();
 
   return Stats(label, n, sw.elapsed, 0);
-}
-
-String _fmtBytes(int n) {
-  if (n < 1024) return '${n}B';
-  if (n < 1024 * 1024) return '${(n / 1024).toStringAsFixed(1)}KB';
-  return '${(n / (1024 * 1024)).toStringAsFixed(2)}MB';
 }

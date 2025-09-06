@@ -96,7 +96,7 @@ function Append-CsvLines {
   param([string]$path, [string]$stdout)
 
   $lines = $stdout -split "`r?`n" | Where-Object { $_ -and -not ($_ -match '^\s*$') }
-  $data  = $lines | Where-Object { $_ -notmatch '^suite,case,' }  # skip header
+  $data  = $lines | Where-Object { $_ -notmatch '^suite,case,' } 
   if ($data.Count -gt 0) {
     $data | Out-File -Append -FilePath $path -Encoding utf8
   }
@@ -104,14 +104,9 @@ function Append-CsvLines {
 
 function Run-Target {
   param([string]$name, [hashtable]$meta)
-  $src = $meta.src
+
   $out = $meta.out
-
-  switch ($Action) {
-    'compile' { Compile-Dart -src $src -out $out; return }
-    'cr'      { Compile-Dart -src $src -out $out }
-  }
-
+  
   Write-Host ""
   Write-Host ("=== Running {0} ({1} iterations) ===" -f $name, $Count) -ForegroundColor Cyan
 
@@ -149,6 +144,16 @@ if ($Csv) { Write-Host ("CSV      : {0}" -f $OutCsv) -ForegroundColor Yellow }
 
 if ($Csv) {
   Ensure-CsvHeader -path $OutCsv
+}
+
+for ($i=0; $i -lt $targets.Length; $i+=2) {
+  $src = $targets[$i+1].src
+  $out = $targets[$i+1].out
+
+  switch ($Action) {
+    'compile' { Compile-Dart -src $src -out $out; return }
+    'cr'      { Compile-Dart -src $src -out $out }
+  }
 }
 
 for ($i=0; $i -lt $targets.Length; $i+=2) {

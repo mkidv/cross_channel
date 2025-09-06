@@ -76,15 +76,23 @@ extension MessagePortToChannelX on MessagePort {
   /// When `strict == true`, the port is closed on unexpected message types.
   ///
   (MpscSender<T>, MpscReceiver<T>) toMpsc<T>({
-    int capacity = 512,
+    int? capacity,
+    DropPolicy policy = DropPolicy.block,
+    OnDrop<T>? onDrop,
+    bool chunked = true,
     bool strict = true,
   }) {
-    final (tx, rx) = Mpsc.bounded<T>(capacity);
+    final (tx, rx) = Mpsc.channel<T>(
+      capacity: capacity,
+      policy: policy,
+      onDrop: onDrop,
+      chunked: chunked,
+    );
     onmessage = ((MessageEvent msg) {
       final data = msg.data.dartify();
       if (data is T) {
         final r = tx.trySend(data);
-        if (r.disconnected) close();
+        if (r.isDisconnected) close();
       } else if (strict) {
         close();
       }
@@ -96,15 +104,23 @@ extension MessagePortToChannelX on MessagePort {
   /// When `strict == true`, the port is closed on unexpected message types.
   ///
   (MpmcSender<T>, MpmcReceiver<T>) toMpmc<T>({
-    int capacity = 512,
+    int? capacity,
+    DropPolicy policy = DropPolicy.block,
+    OnDrop<T>? onDrop,
+    bool chunked = true,
     bool strict = true,
   }) {
-    final (tx, rx) = Mpmc.bounded<T>(capacity);
+    final (tx, rx) = Mpmc.channel<T>(
+      capacity: capacity,
+      policy: policy,
+      onDrop: onDrop,
+      chunked: chunked,
+    );
     onmessage = ((MessageEvent msg) {
       final data = msg.data.dartify();
       if (data is T) {
         final r = tx.trySend(data);
-        if (r.disconnected) close();
+        if (r.isDisconnected) close();
       } else if (strict) {
         close();
       }

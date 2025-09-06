@@ -11,13 +11,13 @@ void main() {
       final prod = () async {
         for (var i = 0; i < N; i++) {
           final r = await tx.send(i);
-          expect(r.ok, isTrue);
+          expect(r.hasSend, isTrue);
         }
       }();
 
       for (var i = 0; i < N; i++) {
         final r = await rx.recv();
-        expect(r.ok, isTrue);
+        expect(r.hasValue, isTrue);
         expect(r.valueOrNull, i);
       }
       await prod;
@@ -30,17 +30,17 @@ void main() {
 
       for (var i = 0; i < 7; i++) {
         final r = tx.trySend(i);
-        expect(r.ok, isTrue, reason: 'trySend($i) should be Ok');
+        expect(r.hasSend, isTrue, reason: 'trySend($i) should be Ok');
       }
       final rFull = tx.trySend(7);
-      expect(rFull.full, isTrue, reason: '8th trySend should be Full');
+      expect(rFull.isFull, isTrue, reason: '8th trySend should be Full');
 
       final rr = await rx.recv();
-      expect(rr.ok, isTrue);
+      expect(rr.hasValue, isTrue);
       expect(rr.valueOrNull, 0);
 
       final rOk = tx.trySend(7);
-      expect(rOk.ok, isTrue, reason: 'trySend should succeed after a pop');
+      expect(rOk.hasSend, isTrue, reason: 'trySend should succeed after a pop');
     });
 
     test('backpressure: send awaits when consumer is slow', () async {
@@ -59,7 +59,7 @@ void main() {
       final received = <int>[];
       for (var i = 0; i < 20; i++) {
         final r = await rx.recv();
-        expect(r.ok, isTrue);
+        expect(r.hasValue, isTrue);
         received.add(r.valueOrNull!);
         if ((i & 3) == 0) {
           await Future<void>.delayed(const Duration(milliseconds: 1));
@@ -74,27 +74,27 @@ void main() {
     test('closing receiver disconnects sender', () async {
       final (tx, rx) = Spsc.channel<int>(8);
 
+      // Start a pending receive so we exercise the cancel path
       rx.recvCancelable();
       rx.close();
 
       final r = await tx.send(42);
-      expect(r.disconnected, isTrue);
+      expect(r.isDisconnected, isTrue);
     });
 
     test('closing sender then draining yields RecvErrorDisconnected', () async {
       final (tx, rx) = Spsc.channel<int>(8);
 
-      expect((await tx.send(1)).ok, isTrue);
-      expect((await tx.send(2)).ok, isTrue);
+      expect((await tx.send(1)).hasSend, isTrue);
+      expect((await tx.send(2)).hasSend, isTrue);
       await tx.send(3);
       tx.close();
-      // Drain until disconnect with a tiny idle window
+      // Drain with a tiny idle window
       final got = await rx.recvAll(idle: const Duration(milliseconds: 1));
       expect(got, isNotEmpty);
-    });
 
-    test('throw on non power-of-two capacity', () {
-      expect(() => Spsc.channel<int>(1000), throwsA(isA<ArgumentError>()));
+      final end = await rx.recv();
+      expect(end.isDisconnected, isTrue);
     });
   });
 }

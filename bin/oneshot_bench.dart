@@ -3,11 +3,7 @@ import 'package:cross_channel/oneshot.dart';
 import 'utils.dart';
 
 Future<void> main(List<String> args) async {
-  final iters = args.isNotEmpty && !args[0].contains('--csv')
-      ? int.parse(args[0])
-      : 2_000_000;
-
-  final csv = args.contains('--csv');
+  final (iters, csv, _) = parseArgs(args);
 
   // Warmup
   await _benchCreateSendRecv(50_000, 'warmup');
@@ -69,7 +65,7 @@ Future<Stats> _benchReuseSenderRecv(int iters, String label) async {
     final r = await rx.recv();
     final dt = t0.elapsedMicroseconds * 1000;
     if (dt > maxNs) maxNs = dt;
-    if (!r.ok) throw StateError('unexpected recv error');
+    if (!r.hasValue) throw StateError('unexpected recv error');
   }
   sw.stop();
   return Stats(label, iters, sw.elapsed, maxNs);

@@ -9,17 +9,17 @@ void main() {
     test('basic send/recv (FIFO order)', () async {
       final (tx, rx) = Mpsc.unbounded<int>();
 
-      expect((await tx.send(1)).ok, isTrue);
-      expect((await tx.send(2)).ok, isTrue);
-      expect((await tx.send(3)).ok, isTrue);
+      expect((await tx.send(1)).hasSend, isTrue);
+      expect((await tx.send(2)).hasSend, isTrue);
+      expect((await tx.send(3)).hasSend, isTrue);
 
       final r1 = await rx.recv();
       final r2 = await rx.recv();
       final r3 = await rx.recv();
 
-      expect(r1.ok, isTrue);
-      expect(r2.ok, isTrue);
-      expect(r3.ok, isTrue);
+      expect(r1.hasValue, isTrue);
+      expect(r2.hasValue, isTrue);
+      expect(r3.hasValue, isTrue);
 
       expect(r1.valueOrNull, 1);
       expect(r2.valueOrNull, 2);
@@ -28,33 +28,33 @@ void main() {
       tx.close();
 
       final r4 = await rx.recv();
-      expect(r4.disconnected, isTrue);
+      expect(r4.isDisconnected, isTrue);
     });
 
     test('send before receiver attached -> buffered then delivered', () async {
       final (tx, rx) = Mpsc.unbounded<int>();
 
-      expect((await tx.send(10)).ok, isTrue);
-      expect((await tx.send(11)).ok, isTrue);
+      expect((await tx.send(10)).hasSend, isTrue);
+      expect((await tx.send(11)).hasSend, isTrue);
 
       // On attache le receiver après coup : on doit tout récupérer
       expect((await rx.recv()).valueOrNull, 10);
       expect((await rx.recv()).valueOrNull, 11);
 
       tx.close();
-      expect((await rx.recv()).disconnected, isTrue);
+      expect((await rx.recv()).isDisconnected, isTrue);
     });
 
     test('tryRecv: empty vs disconnected', () async {
       final (tx, rx) = Mpsc.unbounded<int>();
 
       final e1 = rx.tryRecv();
-      expect(e1.empty, isTrue);
+      expect(e1.isEmpty, isTrue);
 
       tx.close();
 
       final e2 = rx.tryRecv();
-      expect(e2.disconnected, isTrue);
+      expect(e2.isDisconnected, isTrue);
     });
 
     test(
@@ -62,7 +62,7 @@ void main() {
       () async {
         final (tx, rx) = Mpsc.unbounded<int>();
         for (var i = 0; i < 5; i++) {
-          expect((await tx.send(i)).ok, isTrue);
+          expect((await tx.send(i)).hasSend, isTrue);
         }
         tx.close();
 
@@ -113,10 +113,10 @@ void main() {
         tx.close();
 
         final s = await tx.send(42);
-        expect(s.disconnected, isTrue);
+        expect(s.isDisconnected, isTrue);
 
         final r = await rx.recv();
-        expect(r.disconnected, isTrue);
+        expect(r.isDisconnected, isTrue);
       },
     );
 
@@ -124,16 +124,16 @@ void main() {
       'receiver.close() clears buffer and producers see disconnected',
       () async {
         final (tx, rx) = Mpsc.unbounded<int>();
-        expect((await tx.send(1)).ok, isTrue);
-        expect((await tx.send(2)).ok, isTrue);
+        expect((await tx.send(1)).hasSend, isTrue);
+        expect((await tx.send(2)).hasSend, isTrue);
 
         rx.close();
 
-        expect(tx.trySend(3).disconnected, isTrue);
-        expect((await tx.send(4)).disconnected, isTrue);
+        expect(tx.trySend(3).isDisconnected, isTrue);
+        expect((await tx.send(4)).isDisconnected, isTrue);
 
         final r = await rx.recv();
-        expect(r.disconnected, isTrue);
+        expect(r.isDisconnected, isTrue);
       },
     );
   });
@@ -142,17 +142,17 @@ void main() {
     test('trySend: full vs disconnected', () async {
       final (tx, rx) = Mpsc.bounded<String>(2);
 
-      expect(tx.trySend('a').ok, isTrue);
-      expect(tx.trySend('b').ok, isTrue);
+      expect(tx.trySend('a').hasSend, isTrue);
+      expect(tx.trySend('b').hasSend, isTrue);
 
       final f = tx.trySend('c');
-      expect(f.full, isTrue);
+      expect(f.isFull, isTrue);
 
       final r1 = await rx.recv();
-      expect(r1.ok, isTrue);
+      expect(r1.hasValue, isTrue);
       expect(r1.valueOrNull, 'a');
 
-      expect(tx.trySend('c').ok, isTrue);
+      expect(tx.trySend('c').hasSend, isTrue);
 
       tx.close();
 
@@ -162,14 +162,14 @@ void main() {
       expect(r3.valueOrNull, 'c');
 
       final r4 = await rx.recv();
-      expect(r4.disconnected, isTrue);
+      expect(r4.isDisconnected, isTrue);
 
       final (tx2, rx2) = Mpsc.bounded<int>(1);
       tx2.close();
-      expect(tx2.trySend(1).disconnected, isTrue);
+      expect(tx2.trySend(1).isDisconnected, isTrue);
 
       final r5 = await rx2.recv();
-      expect(r5.disconnected, isTrue);
+      expect(r5.isDisconnected, isTrue);
     });
 
     test(
@@ -177,11 +177,11 @@ void main() {
       () async {
         final (tx, rx) = Mpsc.bounded<int>(1);
 
-        expect((await tx.send(1)).ok, isTrue);
+        expect((await tx.send(1)).hasSend, isTrue);
 
         var secondCompleted = false;
         final f2 = tx.send(2).then((res) {
-          expect(res.ok, isTrue);
+          expect(res.hasSend, isTrue);
           secondCompleted = true;
         });
 
@@ -199,7 +199,7 @@ void main() {
         expect(r2.valueOrNull, 2);
 
         final end = await rx.recv();
-        expect(end.disconnected, isTrue);
+        expect(end.isDisconnected, isTrue);
 
         await f2;
       },
@@ -219,14 +219,14 @@ void main() {
         await tick(2);
         expect(c.isCompleted, isFalse);
 
-        expect((await tx.send(99)).ok, isTrue);
+        expect((await tx.send(99)).hasSend, isTrue);
 
         final r = await c.future;
         expect(r.valueOrNull, 99);
 
         tx.close();
         final end = await rx.recv();
-        expect(end.disconnected, isTrue);
+        expect(end.isDisconnected, isTrue);
       },
     );
 
@@ -235,29 +235,29 @@ void main() {
       () async {
         final (tx, rx) = Mpsc.bounded<int>(2);
 
-        expect(tx.trySend(1).ok, isTrue);
-        expect(tx.trySend(2).ok, isTrue);
+        expect(tx.trySend(1).hasSend, isTrue);
+        expect(tx.trySend(2).hasSend, isTrue);
 
         final seen = <int>[];
         final t = () async {
           for (var i = 0; i < 4; i++) {
             final r = await rx.recv();
-            expect(r.ok, isTrue);
+            expect(r.hasValue, isTrue);
             seen.add(r.valueOrNull!);
           }
         }();
 
         await tick();
 
-        expect((await tx.send(3)).ok, isTrue);
-        expect((await tx.send(4)).ok, isTrue);
+        expect((await tx.send(3)).hasSend, isTrue);
+        expect((await tx.send(4)).hasSend, isTrue);
         tx.close();
 
         await t;
         expect(seen, [1, 2, 3, 4]);
 
         final end = await rx.recv();
-        expect(end.disconnected, isTrue);
+        expect(end.isDisconnected, isTrue);
       },
     );
 
@@ -265,17 +265,17 @@ void main() {
       'receiver.close() -> producers see disconnected and buffer is cleared',
       () async {
         final (tx, rx) = Mpsc.bounded<int>(2);
-        expect(tx.trySend(1).ok, isTrue);
-        expect(tx.trySend(2).ok, isTrue);
+        expect(tx.trySend(1).hasSend, isTrue);
+        expect(tx.trySend(2).hasSend, isTrue);
 
         rx.close();
 
-        expect(tx.trySend(3).disconnected, isTrue);
+        expect(tx.trySend(3).isDisconnected, isTrue);
         final s = await tx.send(4);
-        expect(s.disconnected, isTrue);
+        expect(s.isDisconnected, isTrue);
 
         final r = await rx.recv();
-        expect(r.disconnected, isTrue);
+        expect(r.isDisconnected, isTrue);
       },
     );
 
@@ -285,19 +285,19 @@ void main() {
         final (tx0, rx) = Mpsc.bounded<int>(4);
         final tx1 = tx0.clone();
 
-        expect((await tx0.send(1)).ok, isTrue);
-        expect((await tx1.send(2)).ok, isTrue);
+        expect((await tx0.send(1)).hasSend, isTrue);
+        expect((await tx1.send(2)).hasSend, isTrue);
 
         tx0.close();
 
-        expect((await tx1.send(3)).ok, isTrue);
+        expect((await tx1.send(3)).hasSend, isTrue);
         expect((await rx.recv()).valueOrNull, 1);
         expect((await rx.recv()).valueOrNull, 2);
         expect((await rx.recv()).valueOrNull, 3);
 
         tx1.close();
         final end = await rx.recv();
-        expect(end.disconnected, isTrue);
+        expect(end.isDisconnected, isTrue);
       },
     );
 
@@ -308,7 +308,7 @@ void main() {
     });
   });
 
-  group('Mpsc - rendezvous channel', () {
+  group('MPSC - rendezvous channel', () {
     test('ping-pong', () async {
       final (tx, rx) = Mpsc.bounded<int>(0);
       const n = 1000;
@@ -316,7 +316,7 @@ void main() {
       final prod = () async {
         for (var i = 0; i < n; i++) {
           final s = await tx.send(i);
-          expect(s.ok, isTrue);
+          expect(s.hasSend, isTrue);
         }
         tx.close();
       }();
@@ -324,8 +324,8 @@ void main() {
       final cons = () async {
         for (var i = 0; i < n; i++) {
           final r = await rx.recv();
-          expect(r.ok, isTrue);
-          expect((r as RecvOk<int>).value, i);
+          expect(r.hasValue, isTrue);
+          expect(r.valueOrNull, i);
         }
       }();
 
@@ -337,20 +337,20 @@ void main() {
       final s = tx.send(42);
 
       final r = await rx.recv();
-      expect(r.ok, isTrue);
+      expect(r.hasValue, isTrue);
       expect(r.valueOrNull, 42);
 
-      expect(await s, isA<SendOk<int>>());
+      expect(await s, isA<SendOk>());
     });
 
     test('trySend returns Full if no receiver is ready', () {
       final (tx, rx) = Mpsc.bounded<int>(0);
       final s = tx.trySend(1);
-      expect(s.full, isTrue);
+      expect(s.isFull, isTrue);
 
       final r = rx.recv();
       final s1 = tx.trySend(2);
-      expect(s1.ok, isTrue);
+      expect(s1.hasSend, isTrue);
       expect(r, completion(isA<RecvOk<int>>()));
     });
 
@@ -358,15 +358,15 @@ void main() {
       final (tx, rx) = Mpsc.bounded<int>(0);
       final r = rx.recv();
       final s = tx.trySend(7);
-      expect(s.ok, isTrue);
-      expect((await r as RecvOk<int>).value, 7);
+      expect(s.hasSend, isTrue);
+      expect((await r).valueOrNull, 7);
     });
 
     test('close sender disconnect receiver', () async {
       final (tx, rx) = Mpsc.bounded<int>(0);
       tx.close();
       final r = await rx.recv();
-      expect(r.disconnected, isTrue);
+      expect(r.isDisconnected, isTrue);
     });
   });
 }

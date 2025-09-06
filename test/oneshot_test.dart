@@ -8,10 +8,10 @@ void main() {
       final (tx, rx) = OneShot.channel<int>();
       unawaited(() async {
         final s = await tx.send(42);
-        expect(s.ok, isTrue);
+        expect(s.hasSend, isTrue);
       }());
       final r = await rx.recv();
-      expect(r.ok, isTrue);
+      expect(r.hasValue, isTrue);
       expect(r.valueOrNull, 42);
     });
 
@@ -21,22 +21,22 @@ void main() {
         final (tx, rx) = OneShot.channel<int>();
 
         final s1 = await tx.send(1);
-        expect(s1.ok, isTrue);
+        expect(s1.hasSend, isTrue);
 
         final s2 = await tx.send(2);
-        expect(s2.disconnected, isTrue);
+        expect(s2.isDisconnected, isTrue);
 
         final r = rx.tryRecv();
-        expect(r.ok, isTrue);
+        expect(r.hasValue, isTrue);
         expect(r.valueOrNull, 1);
       },
     );
 
     test('trySend after first send -> disconnected', () async {
       final (tx, rx) = OneShot.channel<int>();
-      expect((await tx.send(9)).ok, isTrue);
+      expect((await tx.send(9)).hasSend, isTrue);
       final s2 = tx.trySend(10);
-      expect(s2.disconnected, isTrue);
+      expect(s2.isDisconnected, isTrue);
       expect((await rx.recv()).valueOrNull, 9);
     });
 
@@ -46,17 +46,17 @@ void main() {
       final f2 = rx.recv(); // arrivera trop tard
 
       final s = await tx.send(7);
-      expect(s.ok, isTrue);
+      expect(s.hasSend, isTrue);
 
-      expect((await f1).ok, isTrue);
-      expect((await f2).disconnected, isTrue);
+      expect((await f1).hasValue, isTrue);
+      expect((await f2).isFailed, isTrue);
     });
 
     test('consumeOnce=true: recv after consumed -> disconnected', () async {
       final (tx, rx) = OneShot.channel<String>(consumeOnce: true);
       await tx.send('X');
-      expect((await rx.recv()).ok, isTrue);
-      expect((await rx.recv()).disconnected, isTrue);
+      expect((await rx.recv()).hasValue, isTrue);
+      expect((await rx.recv()).isDisconnected, isTrue);
     });
 
     test('consumeOnce=false: multi reads allowed', () async {
@@ -64,7 +64,7 @@ void main() {
       await tx.send(42);
       for (var i = 0; i < 3; i++) {
         final r = await rx.recv();
-        expect(r.ok, isTrue);
+        expect(r.hasValue, isTrue);
         expect(r.valueOrNull, 42);
       }
     });

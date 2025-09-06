@@ -3,25 +3,33 @@ import 'package:cross_channel/mpmc.dart';
 import 'utils.dart';
 
 Future<void> main(List<String> args) async {
-  final iters = args.isNotEmpty && !args[0].contains('--csv')
-      ? int.parse(args[0])
-      : 2_000_000;
-
-  final csv = args.contains('--csv');
+  final (iters, csv, _) = parseArgs(args);
 
   // Warmup
   await _benchPingPong(1, 200_000, 'warmup');
 
   final results = <Stats>[];
 
-  results.add(await _benchPingPong(1, iters, 'mpmc ping-pong cap=1 (1P/1C)'));
+  results.add(await _benchPingPong(
+    1,
+    iters,
+    'ping-pong cap=1 (1P/1C)',
+  ));
 
   results.add(
-    await _benchPipeline(1024, iters, 'mpmc pipeline cap=1024 (1P/1C)'),
+    await _benchPipeline(
+      1024,
+      iters,
+      'pipeline cap=1024 (1P/1C)',
+    ),
   );
 
   results.add(
-    await _benchPipeline(null, iters, 'mpmc pipeline unbounded (1P/1C)'),
+    await _benchPipeline(
+      null,
+      iters,
+      'pipeline unbounded (1P/1C)',
+    ),
   );
 
   results.add(
@@ -29,7 +37,7 @@ Future<void> main(List<String> args) async {
       4,
       1024,
       (iters / 4).round(),
-      'mpmc producers x4 cap=1024 (1C)',
+      'producers x4 cap=1024 (1C)',
     ),
   );
 
@@ -39,12 +47,16 @@ Future<void> main(List<String> args) async {
       4,
       1024,
       (iters / 4).round(),
-      'mpmc producers x4 / consumers x4 cap=1024',
+      'producers x4 / consumers x4 cap=1024',
     ),
   );
 
   results.add(
-    await _benchPipeline(0, iters, 'mpmc pipeline rendezvous cap=0 (1P/1C)'),
+    await _benchPipeline(
+      0,
+      iters,
+      'pipeline rendezvous cap=0 (1P/1C)',
+    ),
   );
 
   results.add(
@@ -52,7 +64,7 @@ Future<void> main(List<String> args) async {
       DropPolicy.oldest,
       1024,
       iters,
-      'mpmc sliding=oldest cap=1024 (1P/1C)',
+      'sliding=oldest cap=1024 (1P/1C)',
     ),
   );
 
@@ -61,18 +73,21 @@ Future<void> main(List<String> args) async {
       DropPolicy.newest,
       1024,
       iters,
-      'mpmc sliding=newest cap=1024 (1P/1C)',
+      'sliding=newest cap=1024 (1P/1C)',
     ),
   );
 
   results.add(
-    await _benchLatestOnly1C(iters, 'mpmc latestOnly (coalesce) (1P/1C)'),
+    await _benchLatestOnly1C(
+      iters,
+      'latestOnly (coalesce) (1P/1C)',
+    ),
   );
 
   results.add(
     await _benchLatestOnly4C(
       iters,
-      'mpmc latestOnly (coalesce) (1P/4C competitive)',
+      'latestOnly (coalesce) (1P/4C competitive)',
     ),
   );
 
@@ -90,7 +105,11 @@ Future<void> main(List<String> args) async {
   }
 }
 
-Future<Stats> _benchPingPong(int capacity, int iters, String label) async {
+Future<Stats> _benchPingPong(
+  int capacity,
+  int iters,
+  String label,
+) async {
   final (tx, rx) = Mpmc.bounded<int>(capacity);
 
   var remaining = iters;
@@ -102,10 +121,10 @@ Future<Stats> _benchPingPong(int capacity, int iters, String label) async {
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         remaining--;
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }
@@ -114,7 +133,7 @@ Future<Stats> _benchPingPong(int capacity, int iters, String label) async {
   final sendLoop = () async {
     for (var i = 0; i < iters; i++) {
       final s = await tx.send(i);
-      if (s.disconnected) break;
+      if (s.isDisconnected) break;
     }
     tx.close();
   }();
@@ -125,7 +144,11 @@ Future<Stats> _benchPingPong(int capacity, int iters, String label) async {
   return Stats(label, iters, elapsed, maxLatencyNs);
 }
 
-Future<Stats> _benchPipeline(int? capacity, int iters, String label) async {
+Future<Stats> _benchPipeline(
+  int? capacity,
+  int iters,
+  String label,
+) async {
   final (tx, rx) =
       capacity == null ? Mpmc.unbounded<int>() : Mpmc.bounded<int>(capacity);
 
@@ -139,10 +162,10 @@ Future<Stats> _benchPipeline(int? capacity, int iters, String label) async {
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         received++;
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }
@@ -151,7 +174,7 @@ Future<Stats> _benchPipeline(int? capacity, int iters, String label) async {
   final sendLoop = () async {
     for (var i = 0; i < iters; i++) {
       final s = await tx.send(i);
-      if (s.disconnected) break;
+      if (s.isDisconnected) break;
     }
     tx.close();
   }();
@@ -186,10 +209,10 @@ Future<Stats> _benchMultiProducers(
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         received++;
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }
@@ -201,7 +224,7 @@ Future<Stats> _benchMultiProducers(
     senderTasks.add(() async {
       for (var k = 0; k < itersPerProducer; k++) {
         final res = await s.send(k);
-        if (res.disconnected) break;
+        if (res.isDisconnected) break;
       }
       s.close();
     }());
@@ -248,12 +271,12 @@ Future<Stats> _benchProducersConsumers(
         final t0 = Stopwatch()..start();
         final r = await rx.recv();
         final t = t0.elapsedMicroseconds * 1000;
-        if (r.ok) {
+        if (r.hasValue) {
           if (t > maxLatencyNs) maxLatencyNs = t;
           // atomique approximative: contention minime en bench mono-isolate
           received++;
           if (received >= total) break;
-        } else if (r.disconnected) {
+        } else if (r.isDisconnected) {
           break;
         }
       }
@@ -265,7 +288,7 @@ Future<Stats> _benchProducersConsumers(
     producerTasks.add(() async {
       for (var k = 0; k < itersPerProducer; k++) {
         final res = await s.send(k);
-        if (res.disconnected) break;
+        if (res.isDisconnected) break;
       }
       s.close();
     }());
@@ -301,10 +324,10 @@ Future<Stats> _benchSliding(
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         received++;
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }
@@ -313,7 +336,7 @@ Future<Stats> _benchSliding(
   final sendLoop = () async {
     for (var i = 0; i < iters; i++) {
       final res = tx.trySend(i);
-      if (res.full) {
+      if (res.isFull) {
         await tx.send(i);
       }
     }
@@ -333,7 +356,10 @@ Future<Stats> _benchSliding(
   );
 }
 
-Future<Stats> _benchLatestOnly1C(int iters, String label) async {
+Future<Stats> _benchLatestOnly1C(
+  int iters,
+  String label,
+) async {
   final (tx, rx) = Mpmc.latest<int>();
 
   var received = 0;
@@ -346,7 +372,7 @@ Future<Stats> _benchLatestOnly1C(int iters, String label) async {
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         received++;
 
@@ -357,7 +383,7 @@ Future<Stats> _benchLatestOnly1C(int iters, String label) async {
             x ^= i * i;
           }
         }
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }
@@ -384,7 +410,10 @@ Future<Stats> _benchLatestOnly1C(int iters, String label) async {
   );
 }
 
-Future<Stats> _benchLatestOnly4C(int iters, String label) async {
+Future<Stats> _benchLatestOnly4C(
+  int iters,
+  String label,
+) async {
   final (tx, rx0) = Mpmc.latest<int>();
 
   final r1 = rx0.clone();
@@ -401,7 +430,7 @@ Future<Stats> _benchLatestOnly4C(int iters, String label) async {
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         counters[idx]++;
         if (t > maxLatencyNs) maxLatencyNs = t;
         if (counters.fold<int>(0, (a, b) => a + b) >= iters) {
@@ -415,7 +444,7 @@ Future<Stats> _benchLatestOnly4C(int iters, String label) async {
             x ^= i * i;
           }
         }
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }

@@ -3,11 +3,7 @@ import 'package:cross_channel/spsc.dart';
 import 'utils.dart';
 
 Future<void> main(List<String> args) async {
-  final iters = args.isNotEmpty && !args.contains('--csv')
-      ? int.parse(args[0])
-      : 2_000_000;
-
-  final csv = args.contains('--csv');
+  final (iters, csv, _) = parseArgs(args);
 
   // Warmup
   await _benchPingPong(1024, 200_000, 'warmup');
@@ -48,7 +44,7 @@ Future<Stats> _benchPingPong(int pow2, int iters, String label) async {
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         remaining--;
       }
@@ -81,7 +77,7 @@ Future<Stats> _benchPipeline(int pow2, int iters, String label) async {
       final t0 = Stopwatch()..start();
       final r = await rx.recv();
       final t = t0.elapsedMicroseconds * 1000;
-      if (r.ok) {
+      if (r.hasValue) {
         if (t > maxLatencyNs) maxLatencyNs = t;
         received++;
       }

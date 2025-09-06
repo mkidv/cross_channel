@@ -35,18 +35,12 @@ void echoWorker(SendPort handshake) {
 }
 
 Future<void> main(List<String> args) async {
-  final iters = args.isNotEmpty && !args[0].contains('--csv')
-      ? int.parse(args[0])
-      : 20000;
-  final ticks = args.length > 1 && !args[1].contains('--csv')
-      ? int.parse(args[1])
-      : 500000;
-
-  final csv = args.contains('--csv');
+  final (iters, csv, _) = parseArgs(args);
 
   final handshake = ReceivePort();
   final iso = await Isolate.spawn(echoWorker, handshake.sendPort);
   final cmd = await handshake.first as SendPort;
+  handshake.close();
 
   final statusPort = ReceivePort();
   final (_, statusRx) = statusPort.toMpsc<Map<String, dynamic>>(capacity: 2048);
@@ -73,7 +67,7 @@ Future<void> main(List<String> args) async {
   results.add(await _benchBurst(
     cmd,
     statusRx,
-    ticks,
+    500_000,
     'isolate event drain',
   ));
 

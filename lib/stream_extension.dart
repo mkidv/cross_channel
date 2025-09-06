@@ -30,7 +30,7 @@ extension StreamReceiverX<T> on KeepAliveReceiver<T> {
         (v) => ctrl.add(v),
         onError: ctrl.addError,
         onDone: () async {
-          if (closeReceiverOnDone && !isClosed) close();
+          if (closeReceiverOnDone && !isDisconnected) close();
           await ctrl.close();
         },
         cancelOnError: false,
@@ -85,15 +85,15 @@ extension SenderStreamX<T> on Stream<T> {
     try {
       await for (final v in this) {
         final r = tx.trySend(v);
-        if (r.ok) continue;
-        if (r.disconnected) break;
+        if (r.hasSend) continue;
+        if (r.isDisconnected) break;
         if (dropWhenFull) continue;
 
         final r1 = await tx.send(v);
-        if (r1.disconnected) break;
+        if (r1.isDisconnected) break;
       }
     } finally {
-      if (closeSenderOnDone && !tx.isClosed) {
+      if (closeSenderOnDone && !tx.isDisconnected) {
         tx.close();
       }
     }

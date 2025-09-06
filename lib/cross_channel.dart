@@ -3,11 +3,12 @@ import 'package:cross_channel/mpmc.dart';
 import 'package:cross_channel/oneshot.dart';
 import 'package:cross_channel/spsc.dart';
 
+export 'notify.dart';
 export 'select.dart';
 export 'src/core.dart'
     show SenderBatchX, SenderTimeoutX, ReceiverDrainX, ReceiverTimeoutX;
 export 'src/result.dart';
-export 'src/buffer.dart' show DropPolicy, OnDrop;
+export 'src/buffers.dart' show DropPolicy, OnDrop;
 
 /// High-level static factory for channels.
 ///
@@ -23,16 +24,26 @@ final class XChannel {
     int? capacity,
     DropPolicy dropPolicy = DropPolicy.block,
     OnDrop<T>? onDrop,
+    bool chunked = true,
   }) =>
-      Mpsc.channel<T>(capacity: capacity, policy: dropPolicy, onDrop: onDrop);
+      Mpsc.channel<T>(
+          capacity: capacity,
+          policy: dropPolicy,
+          onDrop: onDrop,
+          chunked: chunked);
 
   /// Create an MPMC channel (multi-producer, multi-consumer).
   static (MpmcSender<T>, MpmcReceiver<T>) mpmc<T>({
     int? capacity,
     DropPolicy dropPolicy = DropPolicy.block,
     OnDrop<T>? onDrop,
+    bool chunked = true,
   }) =>
-      Mpmc.channel<T>(capacity: capacity, policy: dropPolicy, onDrop: onDrop);
+      Mpmc.channel<T>(
+          capacity: capacity,
+          policy: dropPolicy,
+          onDrop: onDrop,
+          chunked: chunked);
 
   /// Create a OneShot channel (single value delivery).
   ///
@@ -46,8 +57,8 @@ final class XChannel {
 
   /// Create an SPSC channel backed by a ring buffer with power-of-two capacity.
   /// Extremely fast when SPSC constraints hold.
-  static (SpscSender<T>, SpscReceiver<T>) spsc<T>({required int capacityPow2}) {
-    return Spsc.channel<T>(capacityPow2);
+  static (SpscSender<T>, SpscReceiver<T>) spsc<T>({required int capacity}) {
+    return Spsc.channel<T>(capacity);
   }
 
   /// Latest-only MPSC (single consumer). New sends overwrite older ones.

@@ -1,13 +1,13 @@
 import 'dart:async';
 
-import 'package:cross_channel/src/buffer.dart';
+import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/core.dart';
 import 'package:cross_channel/src/result.dart';
 
 export 'src/core.dart'
     show SenderBatchX, SenderTimeoutX, ReceiverDrainX, ReceiverTimeoutX;
 export 'src/result.dart';
-export 'src/buffer.dart' show DropPolicy, OnDrop;
+export 'src/buffers.dart' show DropPolicy, OnDrop;
 
 /// MPMC channel: multiple producers, multiple independent consumers.
 ///
@@ -18,8 +18,8 @@ final class Mpmc {
   /// Creates an unbounded MPMC channel.
   /// Producers never block; consumer receives in FIFO order.
   ///
-  static (MpmcSender<T>, MpmcReceiver<T>) unbounded<T>() {
-    final buf = UnboundedBuffer<T>();
+  static (MpmcSender<T>, MpmcReceiver<T>) unbounded<T>({bool chunked = true}) {
+    final buf = chunked ? ChunkedBuffer<T>() : UnboundedBuffer<T>();
     final core = _MpmcCore<T>(buf);
     final tx = core.attachSender((c) => MpmcSender<T>._(c));
     final rx = core.attachReceiver((c) => MpmcReceiver._(c));
@@ -52,16 +52,19 @@ final class Mpmc {
     int? capacity,
     DropPolicy policy = DropPolicy.block,
     OnDrop<T>? onDrop,
+    bool chunked = true,
   }) {
     final inner = capacity == null
-        ? UnboundedBuffer<T>()
+        ? chunked
+            ? ChunkedBuffer<T>()
+            : UnboundedBuffer<T>()
         : (capacity == 0)
             ? RendezvousBuffer<T>()
             : BoundedBuffer<T>(capacity: capacity);
     final bool usePolicy =
         capacity != null && capacity > 0 && policy != DropPolicy.block;
     final ChannelBuffer<T> buf = usePolicy
-        ? PolicyBuffer<T>(inner, policy: policy, onDrop: onDrop)
+        ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop)
         : inner;
     final core = _MpmcCore<T>(buf);
     final tx = core.attachSender((c) => MpmcSender<T>._(c));
@@ -98,14 +101,18 @@ final class MpmcSender<T> implements CloneableSender<T> {
   final _MpmcCore<T> _core;
   bool _closed = false;
 
+  @pragma('vm:prefer-inline')
   @override
-  Future<SendResult<T>> send(T v) =>
-      _closed ? Future.value(SendErrorDisconnected<T>()) : _core.send(v);
+  bool get isDisconnected => _core.sendDisconnected || _closed;
+
+  @override
+  Future<SendResult> send(T v) =>
+      _closed ? Future.value(const SendErrorDisconnected()) : _core.send(v);
 
   @pragma('vm:prefer-inline')
   @override
-  SendResult<T> trySend(T v) =>
-      _closed ? SendErrorDisconnected<T>() : _core.trySend(v);
+  SendResult trySend(T v) =>
+      _closed ? const SendErrorDisconnected() : _core.trySend(v);
 
   @override
   void close() {
@@ -113,10 +120,6 @@ final class MpmcSender<T> implements CloneableSender<T> {
     _closed = true;
     _core.dropSender();
   }
-
-  @pragma('vm:prefer-inline')
-  @override
-  bool get isClosed => _closed;
 
   @pragma('vm:prefer-inline')
   @override
@@ -132,18 +135,22 @@ final class MpmcReceiver<T> implements CloneableReceiver<T> {
   bool _closed = false;
   bool _consumed = false;
 
+  @pragma('vm:prefer-inline')
+  @override
+  bool get isDisconnected => _core.recvDisconnected || _closed;
+
   @override
   Future<RecvResult<T>> recv() =>
-      _closed ? Future.value(RecvErrorDisconnected<T>()) : _core.recv();
+      _closed ? Future.value(const RecvErrorDisconnected()) : _core.recv();
 
   @pragma('vm:prefer-inline')
   @override
   RecvResult<T> tryRecv() =>
-      _closed ? RecvErrorDisconnected<T>() : _core.tryRecv();
+      _closed ? const RecvErrorDisconnected() : _core.tryRecv();
 
   @override
   (Future<RecvResult<T>>, void Function()) recvCancelable() => _closed
-      ? (Future.value(RecvErrorDisconnected<T>()), () => {})
+      ? (Future.value(const RecvErrorDisconnected()), () => {})
       : _core.recvCancelable();
 
   @override
@@ -155,7 +162,7 @@ final class MpmcReceiver<T> implements CloneableReceiver<T> {
       switch (await _core.recv()) {
         case RecvOk<T>(value: final v):
           yield v;
-        case RecvError<T>():
+        case RecvError():
           return;
       }
     }
@@ -167,10 +174,6 @@ final class MpmcReceiver<T> implements CloneableReceiver<T> {
     _closed = true;
     _core.dropReceiver();
   }
-
-  @pragma('vm:prefer-inline')
-  @override
-  bool get isClosed => _closed;
 
   @pragma('vm:prefer-inline')
   @override

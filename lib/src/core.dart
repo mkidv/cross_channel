@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:cross_channel/src/buffer.dart';
+import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/lifecycle.dart';
 import 'package:cross_channel/src/ops.dart';
 import 'package:cross_channel/src/result.dart';
@@ -23,7 +23,6 @@ abstract class ChannelCore<T, Self extends Object>
 
 abstract class Closeable {
   void close();
-  bool get isClosed;
 }
 
 abstract class Clones<Self> {
@@ -31,19 +30,21 @@ abstract class Clones<Self> {
 }
 
 abstract class Sender<T> {
-  Future<SendResult<T>> send(T value);
-  SendResult<T> trySend(T value);
+  bool get isDisconnected;
+  Future<SendResult> send(T value);
+  SendResult trySend(T value);
 }
 
 abstract class Receiver<T> {
+  bool get isDisconnected;
   Future<RecvResult<T>> recv();
   RecvResult<T> tryRecv();
+  (Future<RecvResult<T>>, void Function()) recvCancelable();
 }
 
 abstract class KeepAliveSender<T> extends Sender<T> implements Closeable {}
 
 abstract class KeepAliveReceiver<T> extends Receiver<T> implements Closeable {
-  (Future<RecvResult<T>>, void Function()) recvCancelable();
   Stream<T> stream();
 }
 
@@ -54,8 +55,16 @@ abstract class CloneableReceiver<T> extends KeepAliveReceiver<T>
     implements Clones<CloneableReceiver<T>> {}
 
 extension SenderTimeoutX<T> on Sender<T> {
-  Future<SendResult<T>> sendTimeout(T v, Duration d) =>
-      send(v).timeout(d, onTimeout: () => SendErrorDisconnected<T>());
+  Future<SendResult> sendTimeout(T v, Duration d) async {
+    try {
+      return await send(v).timeout(
+        d,
+        onTimeout: () => SendErrorTimeout(d),
+      );
+    } catch (e) {
+      return SendErrorFailed(e);
+    }
+  }
 }
 
 extension ReceiverTimeoutX<T> on Receiver<T> {
@@ -64,10 +73,10 @@ extension ReceiverTimeoutX<T> on Receiver<T> {
       final (fut, cancel) = (this as KeepAliveReceiver<T>).recvCancelable();
       return fut.timeout(d, onTimeout: () {
         cancel();
-        return RecvErrorDisconnected<T>();
+        return RecvErrorTimeout(d);
       });
     }
-    return recv().timeout(d, onTimeout: () => RecvErrorDisconnected<T>());
+    return recv().timeout(d, onTimeout: () => RecvErrorTimeout(d));
   }
 }
 
@@ -81,9 +90,9 @@ extension SenderBatchX<T> on Sender<T> {
   Future<void> sendAll(Iterable<T> it) async {
     for (final v in it) {
       final r = trySend(v);
-      if (r.full) {
+      if (r.isFull) {
         await send(v);
-      } else if (r.disconnected) {
+      } else if (r.isDisconnected) {
         break;
       }
     }
@@ -113,20 +122,14 @@ extension ReceiverDrainX<T> on Receiver<T> {
     if (out.length >= limit || idle == Duration.zero) return out;
 
     while (out.length < limit) {
-      final next = await recv().timeout(
-        idle,
-        onTimeout: () => RecvErrorEmpty<T>(),
-      );
+      final next = await recvTimeout(idle);
 
       if (next is RecvOk<T>) {
         out.add(next.value);
         if (out.length < limit) {
           final remaining = limit - out.length;
           final burst = tryRecvAll(max: remaining);
-          if (burst.isEmpty) {
-          } else {
-            out.addAll(burst);
-          }
+          if (burst.isNotEmpty) out.addAll(burst);
         }
       } else {
         break;

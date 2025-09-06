@@ -1,4 +1,4 @@
-import 'package:cross_channel/src/buffer.dart';
+import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/core.dart';
 import 'package:cross_channel/src/result.dart';
 
@@ -10,8 +10,8 @@ export 'src/result.dart';
 /// Very low overhead; best used when SPSC is guaranteed by design.
 ///
 final class Spsc {
-  static (SpscSender<T>, SpscReceiver<T>) channel<T>(int capacityPow2) {
-    final core = _SpscCore<T>(SpscRingBuffer<T>(capacityPow2));
+  static (SpscSender<T>, SpscReceiver<T>) channel<T>(int capacity) {
+    final core = _SpscCore<T>(SrswBuffer<T>(capacity));
     final tx = core.attachSender((c) => SpscSender<T>._(c));
     final rx = core.attachReceiver((c) => SpscReceiver<T>._(c));
     return (tx, rx);
@@ -34,13 +34,17 @@ final class SpscSender<T> implements KeepAliveSender<T> {
   final _SpscCore<T> _core;
   bool _closed = false;
 
+  @pragma('vm:prefer-inline')
   @override
-  Future<SendResult<T>> send(T v) =>
-      _closed ? Future.value(SendErrorDisconnected<T>()) : _core.send(v);
+  bool get isDisconnected => _core.sendDisconnected || _closed;
 
   @override
-  SendResult<T> trySend(T v) =>
-      _closed ? SendErrorDisconnected<T>() : _core.trySend(v);
+  Future<SendResult> send(T v) =>
+      _closed ? Future.value(const SendErrorDisconnected()) : _core.send(v);
+
+  @override
+  SendResult trySend(T v) =>
+      _closed ? const SendErrorDisconnected() : _core.trySend(v);
 
   @override
   void close() {
@@ -48,9 +52,6 @@ final class SpscSender<T> implements KeepAliveSender<T> {
     _closed = true;
     _core.dropSender();
   }
-
-  @override
-  bool get isClosed => _closed;
 }
 
 final class SpscReceiver<T> implements KeepAliveReceiver<T> {
@@ -59,17 +60,21 @@ final class SpscReceiver<T> implements KeepAliveReceiver<T> {
   bool _closed = false;
   bool _consumed = false;
 
+  @pragma('vm:prefer-inline')
+  @override
+  bool get isDisconnected => _core.recvDisconnected || _closed;
+
   @override
   Future<RecvResult<T>> recv() =>
-      _closed ? Future.value(RecvErrorDisconnected<T>()) : _core.recv();
+      _closed ? Future.value(const RecvErrorDisconnected()) : _core.recv();
 
   @override
   RecvResult<T> tryRecv() =>
-      _closed ? RecvErrorDisconnected<T>() : _core.tryRecv();
+      _closed ? const RecvErrorDisconnected() : _core.tryRecv();
 
   @override
   (Future<RecvResult<T>>, void Function()) recvCancelable() => _closed
-      ? (Future.value(RecvErrorDisconnected<T>()), () => {})
+      ? (Future.value(const RecvErrorDisconnected()), () => {})
       : _core.recvCancelable();
 
   @override
@@ -80,7 +85,7 @@ final class SpscReceiver<T> implements KeepAliveReceiver<T> {
       switch (await _core.recv()) {
         case RecvOk<T>(value: final v):
           yield v;
-        case RecvError<T>():
+        case RecvError():
           return;
       }
     }
@@ -92,7 +97,4 @@ final class SpscReceiver<T> implements KeepAliveReceiver<T> {
     _closed = true;
     _core.dropReceiver();
   }
-
-  @override
-  bool get isClosed => _closed;
 }

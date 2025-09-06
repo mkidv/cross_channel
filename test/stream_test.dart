@@ -8,7 +8,7 @@ import 'utils.dart';
 void main() {
   group('Stream bridge', () {
     test(
-      'rx.asBroadcastStream(): duplicates to multiple listeners and closes properly',
+      'rx.toBroadcastStream(): duplicates to multiple listeners and closes properly',
       () async {
         final (tx, rx) = Mpsc.unbounded<int>();
         final b = rx.toBroadcastStream();
@@ -117,7 +117,7 @@ void main() {
         await sub.asFuture<void>();
         expect(got, [0, 1, 2]);
 
-        expect(rx.isClosed, isTrue);
+        expect(rx.isDisconnected, isTrue);
       },
     );
 
@@ -181,7 +181,7 @@ void main() {
       }
 
       await src().redirectToSender(tx, closeSenderOnDone: false);
-      expect(tx.isClosed, isFalse);
+      expect(tx.isDisconnected, isFalse);
 
       tx.close();
 

@@ -1,4 +1,4 @@
-import 'package:cross_channel/src/buffer.dart';
+import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/result.dart';
 
 /// Channel lifecycle: tracks active senders/receivers and handles shutdown.
@@ -54,8 +54,8 @@ mixin ChannelLifecycle<T, Self extends Object> {
     if (_activeSenders > 0) _activeSenders--;
     if (_activeSenders == 0) {
       _closedSenders = true;
-      buf.wakeAllSenders();
-      if (buf.isEmpty) buf.failAllReceivers(RecvErrorDisconnected<T>());
+      buf.wakeAllPushWaiters();
+      if (buf.isEmpty) buf.failAllPopWaiters(const RecvErrorDisconnected());
     }
   }
 
@@ -65,8 +65,8 @@ mixin ChannelLifecycle<T, Self extends Object> {
     if (_activeReceivers > 0) _activeReceivers--;
     if (_activeReceivers == 0) {
       _closedReceivers = true;
-      buf.wakeAllSenders();
-      buf.failAllReceivers(RecvErrorDisconnected<T>());
+      buf.wakeAllPushWaiters();
+      buf.failAllPopWaiters(const RecvErrorDisconnected());
       buf.clear();
     }
   }

@@ -12,6 +12,108 @@
 
 ---
 
+## [0.7.0] – 2025-09-06
+
+### Breaking
+
+- **Select → XSelect**
+  - `Select.any(...)` **removed**. Use:
+    - `XSelect.run<T>((b) => b ... )` — async, waits for first ready arm.
+    - `XSelect.syncRun<T>((b) => b ... )` — **non-blocking**, returns immediately if an arm is ready.
+    - `XSelect.race<T>([ (b) => b.onFuture(...), ... ])` — sugar to race multiple builders.
+    - `XSelect.syncRace<T>([ ... ])` — non-blocking variant.
+  - Builder API changes:
+    - New `onRecvValue(rx, onValue, onDisconnected: ...)` when you only care about values.
+    - New `onTick(Ticker, ...)` and `timeout(duration, ...)`.
+    - `onStream`, `onFuture` kept (signatures aligned).
+  - Loop control: `SelectDecision` **removed**. Just return the value you want from the winning arm. If you used `continueLoop/breakLoop`, return a `bool` instead and branch on it.
+- **Property rename**
+  - `Receiver.isClosed` → **`Receiver.isDisconnected`** (and it’s available on **all** receivers, not just closable ones).
+- **Result helpers rename**
+  - `SendResultX.isOk` → **`hasSend`**
+  - `RecvResultX.isOk` → **`hasValue`**
+  - (Others kept: `isFull`, `isDisconnected`, `isTimeout`, `isFailed`, `hasError`, `isEmpty`, `valueOrNull`.)
+- **Low-level channel factory parameter rename**
+  - `{Mpsc,Mpmc}.channel<T>(..., **dropPolicy**: ...)` → `{Mpsc,Mpmc}.channel<T>(..., **policy**: ...)`
+  - `onDrop` unchanged.
+- **SPSC constructor signature**
+  - `Spsc.channel<T>(**capacityPow2:** 1024)` → `Spsc.channel<T>(1024)` (positional power-of-two).
+- **MPMC send semantics clarified**
+  - Sending with **no live receivers** now returns `SendErrorDisconnected` immediately (enforced consistently across bounded/unbounded).
+
+### Added
+
+- **Notify** primitive:
+
+  - `notified()` → `(Future<void>, cancel)` that consumes a permit if available, otherwise waits.
+  - `notifyOne()` wakes one waiter or stores a permit; `notifyAll()` wakes all current waiters.
+  - `close()` wakes waiters with `disconnected`.
+  - `epoch` for tracing/tests.
+- **Uniform receiver capabilities**:
+  - `recvCancelable()` on **all** receivers.
+  - `isDisconnected` property available on **all** receivers.
+- **Ticker**
+  - `Ticker.every(Duration)` with `.reset(...)` to integrate timed arms via `onTick`.
+- **Examples**
+  - `example/` showcasing MPSC, MPMC, SPSC, OneShot, LatestOnly, and `XSelect`.
+
+### Changed
+
+- **Select integration**
+  - `XSelect` now uses `recvCancelable()` under the hood for receivers; cancellation is best-effort where an implementation cannot immediately abort a pending wait.
+- **Unbounded buffers**
+  - Now **chunked** by default for throughput & GC friendliness:
+    - Hot small ring + chunked overflow.
+    - Tuned defaults (internal): `hot=8192`, `chunk=4096`, `rebalanceBatch=64`, `threshold=cap/16`, `gate=chunk/2`.
+  - `Mpsc.unbounded` / `Mpmc.unbounded` accept `chunked: true|false` (default **true**).
+- **LatestOnly**
+  - Fast-path coalescing tightened; benches around ~110–140 Mops/s on common desktop VMs.
+- Docs/README updated to `XSelect.*`, `policy` parameter, SPSC signature, **`isDisconnected`**, and universal `recvCancelable()`.
+
+### Migration guide (0.6 → 0.7)
+
+```diff
+
+- while (!rx.isClosed) {
++ while (!rx.isDisconnected) {
+    // ...
+  }
+```
+
+```diff
+- final out = await Select.any((s) => s
+-   ..onReceiver(rx, ok: (v) => SelectDecision.breakLoop)
+-   ..onFuture(fut, (_) => SelectDecision.continueLoop));
+
++ final broke = await XSelect.run<bool>((s) => s
++   ..onRecvValue(rx, (v) => true, onDisconnected: () => true)
++   ..onFuture(fut, (_) => false));
++ if (broke) break;
+```
+
+```diff
+- final (tx, rx) = Mpmc.channel<int>(capacity: 1024, dropPolicy: DropPolicy.oldest);
++ final (tx, rx) = Mpmc.channel<int>(capacity: 1024, policy: DropPolicy.oldest);
+```
+
+```diff
+- final (tx, rx) = Spsc.channel<int>(capacityPow2: 1024);
++ final (tx, rx) = Spsc.channel<int>(1024);
+```
+
+```diff
+- if ((await tx.send(v)).isOk) { ... }
++ if ((await tx.send(v)).hasSend) { ... }
+```
+
+```diff
+- final r = await rx.recv(); if (r.isOk) use(r.valueOrNull);
++ final r = await rx.recv(); if (r.hasValue) use(r.valueOrNull!);
+
+```
+
+---
+
 ## [0.6.0] – 2025-09-01
 
 ### Added

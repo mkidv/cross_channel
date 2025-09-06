@@ -1,26 +1,22 @@
 import 'dart:async';
 
-import 'package:cross_channel/src/buffer.dart';
+import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/core.dart';
 import 'package:cross_channel/src/result.dart';
 
 export 'src/core.dart'
     show SenderBatchX, SenderTimeoutX, ReceiverDrainX, ReceiverTimeoutX;
 export 'src/result.dart';
-export 'src/buffer.dart' show DropPolicy, OnDrop;
+export 'src/buffers.dart' show DropPolicy, OnDrop;
 
 /// MPSC channel: multiple producers, single consumer.
-///
-/// - `channel<T>()`: unbounded queue.
-/// - `syncChannel<T>(capacity)`: bounded queue (capacity >= 0, 0 = rendezvous).
-/// - `sliding<T>(capacity, policy)`: bounded queue with drop policy.
 ///
 class Mpsc {
   /// Creates an unbounded MPSC channel.
   /// Producers never block; consumer receives in FIFO order.
   ///
-  static (MpscSender<T>, MpscReceiver<T>) unbounded<T>() {
-    final buf = UnboundedBuffer<T>();
+  static (MpscSender<T>, MpscReceiver<T>) unbounded<T>({bool chunked = true}) {
+    final buf = chunked ? ChunkedBuffer<T>() : UnboundedBuffer<T>();
     final core = _MpscCore<T>(buf);
     final tx = core.attachSender((c) => MpscSender<T>._(c));
     final rx = core.attachReceiver((c) => MpscReceiver<T>._(c));
@@ -53,16 +49,19 @@ class Mpsc {
     int? capacity,
     DropPolicy policy = DropPolicy.block,
     OnDrop<T>? onDrop,
+    bool chunked = true,
   }) {
     final inner = capacity == null
-        ? UnboundedBuffer<T>()
+        ? chunked
+            ? ChunkedBuffer<T>()
+            : UnboundedBuffer<T>()
         : (capacity == 0)
             ? RendezvousBuffer<T>()
             : BoundedBuffer<T>(capacity: capacity);
     final bool usePolicy =
         capacity != null && capacity > 0 && policy != DropPolicy.block;
     final ChannelBuffer<T> buf = usePolicy
-        ? PolicyBuffer<T>(inner, policy: policy, onDrop: onDrop)
+        ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop)
         : inner;
     final core = _MpscCore<T>(buf);
     final tx = core.attachSender((c) => MpscSender<T>._(c));
@@ -73,6 +72,7 @@ class Mpsc {
   /// Creates an MPSC channel that keeps only the **latest** value.
   /// Each new send coalesces/overwrites the previous one.
   /// Suitable for UI signals, progress, sensors, etc.
+  ///
   static (MpscSender<T>, MpscReceiver<T>) latest<T>() {
     final core = _MpscCore<T>(LatestOnlyBuffer<T>());
     final tx = core.attachSender((c) => MpscSender<T>._(c));
@@ -102,14 +102,18 @@ final class MpscSender<T> implements CloneableSender<T> {
   final _MpscCore<T> _core;
   bool _closed = false;
 
+  @pragma('vm:prefer-inline')
   @override
-  Future<SendResult<T>> send(T v) =>
-      _closed ? Future.value(SendErrorDisconnected<T>()) : _core.send(v);
+  bool get isDisconnected => _core.sendDisconnected || _closed;
+
+  @override
+  Future<SendResult> send(T v) =>
+      _closed ? Future.value(const SendErrorDisconnected()) : _core.send(v);
 
   @pragma('vm:prefer-inline')
   @override
-  SendResult<T> trySend(T v) =>
-      _closed ? SendErrorDisconnected<T>() : _core.trySend(v);
+  SendResult trySend(T v) =>
+      _closed ? const SendErrorDisconnected() : _core.trySend(v);
 
   @override
   void close() {
@@ -117,10 +121,6 @@ final class MpscSender<T> implements CloneableSender<T> {
     _closed = true;
     _core.dropSender();
   }
-
-  @pragma('vm:prefer-inline')
-  @override
-  bool get isClosed => _closed;
 
   @pragma('vm:prefer-inline')
   @override
@@ -140,30 +140,34 @@ final class MpscReceiver<T> implements KeepAliveReceiver<T> {
   bool _consumed = false;
   bool _closed = false;
 
+  @pragma('vm:prefer-inline')
+  @override
+  bool get isDisconnected => _core.recvDisconnected || _closed;
+
   @override
   Future<RecvResult<T>> recv() =>
-      _closed ? Future.value(RecvErrorDisconnected<T>()) : _core.recv();
+      _closed ? Future.value(const RecvErrorDisconnected()) : _core.recv();
 
   @pragma('vm:prefer-inline')
   @override
   RecvResult<T> tryRecv() =>
-      _closed ? RecvErrorDisconnected<T>() : _core.tryRecv();
+      _closed ? const RecvErrorDisconnected() : _core.tryRecv();
 
   @override
   (Future<RecvResult<T>>, void Function()) recvCancelable() => _closed
-      ? (Future.value(RecvErrorDisconnected<T>()), () => {})
+      ? (Future.value(const RecvErrorDisconnected()), () => {})
       : _core.recvCancelable();
 
   @override
   Stream<T> stream() async* {
-    if (_consumed) throw StateError('Receiver.stream() is single-subscription');
+    if (_consumed) throw StateError('stream is single-subscription');
     _consumed = true;
 
     while (true) {
       switch (await _core.recv()) {
         case RecvOk<T>(value: final v):
           yield v;
-        case RecvError<T>():
+        case RecvError():
           return;
       }
     }
@@ -175,8 +179,4 @@ final class MpscReceiver<T> implements KeepAliveReceiver<T> {
     _closed = true;
     _core.dropReceiver();
   }
-
-  @pragma('vm:prefer-inline')
-  @override
-  bool get isClosed => _closed;
 }

@@ -1,4 +1,4 @@
-import 'package:cross_channel/src/buffer.dart';
+import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/result.dart';
 
 /// High-level channel operations backed by a `ChannelBuffer<T>`.
@@ -12,41 +12,49 @@ mixin ChannelOps<T> {
   bool get sendDisconnected;
   bool get recvDisconnected;
 
-  Future<SendResult<T>> send(T value) async {
-    if (sendDisconnected) return SendErrorDisconnected<T>();
+  // ignore: prefer_function_declarations_over_variables
+  static final void Function() _noop = () {};
 
-    final r0 = buf.trySendNow(value);
-    if (r0.ok) return r0;
+  Future<SendResult> send(T value) async {
+    if (sendDisconnected) return const SendErrorDisconnected();
+
+    final r0 = buf.tryPush(value);
+    if (r0) return SendOk();
 
     while (true) {
-      await buf.waitSendPermit();
-      try {
-        if (sendDisconnected) return SendErrorDisconnected<T>();
-        final r1 = buf.trySendNow(value);
-        if (r1.ok) return r1;
-      } finally {
-        buf.consumePermitIfAny();
+      await buf.waitNotFull();
+
+      if (sendDisconnected) {
+        buf.consumePushPermit();
+        return const SendErrorDisconnected();
       }
+
+      final r1 = buf.tryPush(value);
+      buf.consumePushPermit();
+      if (r1) return SendOk();
     }
   }
 
   @pragma('vm:prefer-inline')
-  SendResult<T> trySend(T value) {
-    if (sendDisconnected) return SendErrorDisconnected<T>();
-    return buf.trySendNow(value);
+  SendResult trySend(T value) {
+    if (sendDisconnected) return const SendErrorDisconnected();
+    return buf.tryPush(value) ? SendOk() : SendErrorFull();
   }
 
   Future<RecvResult<T>> recv() async {
-    final v = buf.tryPop();
-    if (v != null) return RecvOk<T>(v);
-    if (recvDisconnected) return RecvErrorDisconnected<T>();
+    while (true) {
+      final v0 = buf.tryPop();
+      if (v0 != null) return RecvOk<T>(v0);
+      if (recvDisconnected) return const RecvErrorDisconnected();
 
-    final c = buf.addRecvWaiter();
-    try {
-      final v1 = await c.future;
-      return RecvOk<T>(v1);
-    } catch (_) {
-      return RecvErrorDisconnected<T>();
+      final c = buf.addPopWaiter();
+
+      try {
+        final v1 = await c.future;
+        return RecvOk<T>(v1);
+      } catch (e) {
+        return (e is RecvError) ? e : RecvErrorFailed(e);
+      }
     }
   }
 
@@ -54,33 +62,43 @@ mixin ChannelOps<T> {
   RecvResult<T> tryRecv() {
     final v = buf.tryPop();
     if (v != null) return RecvOk<T>(v);
-    if (recvDisconnected) return RecvErrorDisconnected<T>();
-    return RecvErrorEmpty<T>();
+    if (recvDisconnected) return const RecvErrorDisconnected();
+    return const RecvErrorEmpty();
   }
 
   @pragma('vm:prefer-inline')
   (Future<RecvResult<T>>, void Function()) recvCancelable() {
     final v = buf.tryPop();
-    if (v != null) {
-      return (Future.value(RecvOk<T>(v)), () {});
-    }
+    if (v != null) return (Future.value(RecvOk<T>(v)), _noop);
     if (recvDisconnected) {
-      return (Future.value(RecvErrorDisconnected<T>()), () {});
+      return (Future.value(const RecvErrorDisconnected()), _noop);
     }
 
-    final c = buf.addRecvWaiter();
-    bool cancelled = false;
+    final c = buf.addPopWaiter();
+    var canceled = false;
 
-    final Future<RecvResult<T>> fut = c.future
-        .then<RecvResult<T>>((v1) => RecvOk<T>(v1))
-        .catchError((_) => RecvErrorDisconnected<T>());
+    final v1 = buf.tryPop();
+    if (v1 != null) {
+      buf.removePopWaiter(c);
+      return (Future<RecvResult<T>>.value(RecvOk<T>(v1)), _noop);
+    }
 
+    final fut = c.future.then<RecvResult<T>>((v2) {
+      if (canceled) return const RecvErrorCanceled();
+      return RecvOk<T>(v2);
+    }).catchError((Object e) {
+      if (e is RecvError) return e;
+      return RecvErrorFailed(e);
+    });
+
+    @pragma('vm:prefer-inline')
     void cancel() {
-      if (cancelled) return;
-      cancelled = true;
-      final removed = buf.removeRecvWaiter(c);
+      if (canceled) return;
+      canceled = true;
+
+      final removed = buf.removePopWaiter(c);
       if (removed) {
-        c.completeError(RecvErrorDisconnected<T>());
+        c.completeError(const RecvErrorCanceled());
       }
     }
 

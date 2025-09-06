@@ -24,9 +24,9 @@ void main() {
         final recvF = () async {
           while (got.length < total) {
             final r = await rx.recv();
-            if (r.ok) {
+            if (r.hasValue) {
               got.add(r.valueOrNull!);
-            } else if (r.disconnected) {
+            } else if (r.isDisconnected) {
               break;
             }
           }
@@ -38,7 +38,7 @@ void main() {
           tasks.add(() async {
             for (var k = 0; k < perProd; k++) {
               final res = await s.send(i << 28 | k); // tag producer
-              if (res.disconnected) break;
+              if (res.isDisconnected) break;
             }
             s.close();
           }());
@@ -92,7 +92,7 @@ void main() {
           prodF.add(() async {
             for (var k = 0; k < perProd; k++) {
               final res = await s.send(p << 28 | k);
-              if (res.disconnected) break;
+              if (res.isDisconnected) break;
             }
             s.close();
           }());
@@ -114,17 +114,17 @@ void main() {
       () async {
         final (tx, rx) = Mpsc.bounded<int>(1);
 
-        expect((await tx.send(1)).ok, isTrue);
+        expect((await tx.send(1)).hasSend, isTrue);
 
         final f2 = tx.send(2);
         await tick(2);
         tx.close();
 
         final res = await f2.timeout(const Duration(seconds: 2));
-        expect(res.disconnected, isTrue);
+        expect(res.isDisconnected, isTrue);
 
         expect((await rx.recv()).valueOrNull, 1);
-        expect((await rx.recv()).disconnected, isTrue);
+        expect((await rx.recv()).isDisconnected, isTrue);
       },
       timeout: Timeout(Duration(seconds: 20)),
     );
@@ -144,9 +144,9 @@ void main() {
         final cons = () async {
           while (recvCount < total) {
             final r = await rx1.recv();
-            if (r.ok) {
+            if (r.hasValue) {
               recvCount++;
-            } else if (r.disconnected) {
+            } else if (r.isDisconnected) {
               break;
             }
           }
@@ -156,7 +156,7 @@ void main() {
         final prod = () async {
           for (var i = 0; i < total; i++) {
             final s = await tx.send(i);
-            if (s.disconnected) break;
+            if (s.isDisconnected) break;
           }
           tx.close();
           pDone.complete();
@@ -209,7 +209,7 @@ void main() {
           prodF.add(() async {
             for (var k = 0; k < perProd; k++) {
               final res = await s.send(p << 28 | k);
-              if (res.disconnected) break;
+              if (res.isDisconnected) break;
             }
             s.close();
           }());
@@ -231,14 +231,14 @@ void main() {
       () async {
         final (tx, rx) = Mpmc.bounded<int>(1);
 
-        expect((await tx.send(1)).ok, isTrue);
+        expect((await tx.send(1)).hasSend, isTrue);
         final blocked = tx.send(2);
         await tick(2);
 
         rx.close();
 
         final s2 = await blocked.timeout(const Duration(seconds: 2));
-        expect(s2.disconnected, isTrue);
+        expect(s2.isDisconnected, isTrue);
       },
       timeout: Timeout(Duration(seconds: 20)),
     );
@@ -256,14 +256,14 @@ void main() {
 
         final n = 20_000;
         for (var i = 0; i < n; i++) {
-          expect((await tx.send(i)).ok, isTrue);
+          expect((await tx.send(i)).hasSend, isTrue);
         }
         tx.close();
 
         final drained = <int>[];
         while (true) {
           final r = await rx.recv();
-          if (!r.ok) break;
+          if (!r.hasValue) break;
           drained.add(r.valueOrNull!);
         }
 
@@ -284,14 +284,14 @@ void main() {
 
         final n = 20_000;
         for (var i = 0; i < n; i++) {
-          expect((await tx.send(i)).ok, isTrue);
+          expect((await tx.send(i)).hasSend, isTrue);
         }
         tx.close();
 
         final drained = <int>[];
         while (true) {
           final r = await rx.recv();
-          if (!r.ok) break;
+          if (!r.hasValue) break;
           drained.add(r.valueOrNull!);
         }
 

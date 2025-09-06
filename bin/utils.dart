@@ -37,3 +37,24 @@ class Stats {
         '${nsPerOp.toStringAsFixed(1)},${maxUs.toStringAsFixed(1)}';
   }
 }
+
+(int iters, bool csv, bool experimental) parseArgs(List<String> args) {
+  final iters =
+      args.isNotEmpty && !args[0].contains('--') ? int.parse(args[0]) : 500_000;
+  var csv = false;
+  var exp = false;
+  for (final a in args) {
+    if (a.startsWith('--csv')) csv = true;
+    if (a.startsWith('--exp')) exp = true;
+  }
+
+  return (iters, csv, exp);
+}
+
+extension IntBytesX on int {
+  String bytesToPrettyString() {
+    if (this < 1024) return '${this}B';
+    if (this < 1024 * 1024) return '${(this / 1024).toStringAsFixed(1)}KB';
+    return '${(this / (1024 * 1024)).toStringAsFixed(2)}MB';
+  }
+}
