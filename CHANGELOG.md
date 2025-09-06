@@ -6,9 +6,17 @@
 
 ### Planned
 
-- **Broadcast ring** with lag detection
-- **Watch** channel (coalescing last value)
-- **Notify** primitive (wake one/all)
+- **Broadcast ring (pub-sub)** with per-subscriber cursors and lag detection.
+- **Watch / State channel**: latest-only with optional `replay(1)` for late subscribers.
+- **Cancellation scopes & tokens** integrated with `Select`.
+- **Rate-limiting adapters** on senders/receivers: `throttle`, `debounce`, `window`.
+
+---
+
+## [0.7.1] – 2025-09-06
+
+### Fixed
+- `pubspec.yaml`: expanded `description` to satisfy pub.dev length checks.
 
 ---
 
@@ -20,7 +28,7 @@
   - `Select.any(...)` **removed**. Use:
     - `XSelect.run<T>((b) => b ... )` — async, waits for first ready arm.
     - `XSelect.syncRun<T>((b) => b ... )` — **non-blocking**, returns immediately if an arm is ready.
-    - `XSelect.race<T>([ (b) => b.onFuture(...), ... ])` — sugar to race multiple builders.
+    - `XSelect.race<T>([ (b) => b.onFuture(...), ... ])` — race multiple builders.
     - `XSelect.syncRace<T>([ ... ])` — non-blocking variant.
   - Builder API changes:
     - New `onRecvValue(rx, onValue, onDisconnected: ...)` when you only care about values.
@@ -49,6 +57,7 @@
   - `notifyOne()` wakes one waiter or stores a permit; `notifyAll()` wakes all current waiters.
   - `close()` wakes waiters with `disconnected`.
   - `epoch` for tracing/tests.
+
 - **Uniform receiver capabilities**:
   - `recvCancelable()` on **all** receivers.
   - `isDisconnected` property available on **all** receivers.

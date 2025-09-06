@@ -1,6 +1,6 @@
 bench/
 bench_lite.ps1
-bench.ps1
+bench_full.ps1
 
 .github/
 .vscode/
