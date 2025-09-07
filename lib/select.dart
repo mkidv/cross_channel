@@ -186,16 +186,107 @@ class _ReceiverBranch<T, R> implements _Branch<R> {
   }
 }
 
-/// Lightweight, composable selector for Futures, Streams, Timers, and channels.
+/// Async multiplexing - race multiple operations with automatic cancellation.
+///
+/// The cornerstone of reactive, event-driven applications. Race channels,
+/// timers, futures, and streams with automatic cleanup of losers. Essential
+/// for building responsive UIs and efficient event processing systems.
+///
+/// ## Core Concepts
+/// - **First wins**: The first operation to complete wins, all others are canceled
+/// - **Automatic cleanup**: Losing operations are properly canceled to prevent leaks
+/// - **Type-safe**: Each branch can return different types, unified by the result type
+/// - **Composable**: Easily combine different async sources in a single select
+///
+/// ## Usage Patterns
+///
+/// **Responsive UI with timeout:**
+/// ```dart
+/// final result = await XSelect.run<String>((s) => s
+///   ..onRecvValue(dataChannel, (data) => 'got_data: $data')
+///   ..onTick(Ticker.every(Duration(seconds: 1)), () => 'heartbeat')
+///   ..timeout(Duration(seconds: 30), () => 'timeout_reached')
+/// );
+///
+/// switch (result) {
+///   case 'timeout_reached':
+///     showTimeoutMessage();
+///   case String data when data.startsWith('got_data'):
+///     processData(data);
+///   case 'heartbeat':
+///     updateHeartbeat();
+/// }
+/// ```
+///
+/// **Multi-source event aggregation:**
+/// ```dart
+/// final event = await XSelect.run<AppEvent>((s) => s
+///   ..onStream(userInteractions, (e) => AppEvent.user(e))
+///   ..onStream(networkEvents, (e) => AppEvent.network(e))
+///   ..onRecvValue(backgroundTasks, (t) => AppEvent.background(t))
+///   ..onFuture(systemCheck(), (r) => AppEvent.system(r))
+/// );
+///
+/// handleEvent(event);
+/// ```
+///
+/// **Configuration reload with graceful fallback:**
+/// ```dart
+/// Future<Config> loadConfigWithFallback() async {
+///   return await XSelect.run<Config>((s) => s
+///     ..onFuture(loadFromServer(), (c) => c)
+///     ..onFuture(loadFromCache(), (c) => c)
+///     ..timeout(Duration(seconds: 5), () => Config.defaultConfig())
+///   );
+/// }
+/// ```
 class XSelect {
-  /// Build-and-run an async selection. First branch to resolve wins; the rest are canceled.
-  /// Optionally adds a global timeout and/or fairness rotation (default).
+  /// Race multiple async operations - first to complete wins.
+  ///
+  /// Build a selection of async operations using the builder pattern.
+  /// The first operation to complete determines the result, and all
+  /// other operations are automatically canceled.
+  ///
+  /// **Parameters:**
+  /// - [build]: Builder function to configure the selection branches
+  /// - [timeout]: Optional global timeout for the entire selection
+  /// - [onTimeout]: Function to call if the global timeout is reached
+  /// - [ordered]: If `true`, evaluates branches in order; if `false`, uses fairness rotation
+  ///
+  /// **Example - Event-driven architecture:**
+  /// ```dart
+  /// // WebSocket server with graceful shutdown and health checks
+  /// class WebSocketManager {
+  ///   final _commands = XChannel.mpsc<ServerCommand>(capacity: 100);
+  ///   final _health = Ticker.every(Duration(seconds: 30));
+  ///
+  ///   Future<void> eventLoop() async {
+  ///     while (true) {
+  ///       final action = await XSelect.run<String>((s) => s
+  ///         ..onRecvValue(_commands, (cmd) => _handleCommand(cmd))
+  ///         ..onTick(_health, () => 'health_check')
+  ///         ..onStream(websocketStream, (msg) => _handleWebSocket(msg))
+  ///         ..timeout(Duration(minutes: 5), () => 'idle_timeout')
+  ///       );
+  ///
+  ///       if (action == 'idle_timeout') break;
+  ///       if (action == 'shutdown') break;
+  ///       // Continue processing...
+  ///     }
+  ///   }
+  /// }
+  /// ```
+  ///
+  /// **See also:**
+  /// - [SelectBuilder] for available operations
+  /// - [Ticker] for timer-based operations
+  /// - [XChannel] for channel-based communication
   static Future<R> run<R>(
-    void Function(SelectBuilder<R> b) build, {
+    void Function(SelectBuilder<R>) build, {
     Duration? timeout,
     FutureOr<R> Function()? onTimeout,
     bool ordered = false,
-  }) {
+  }) async {
     final b = SelectBuilder<R>();
     build(b);
     if (timeout != null && onTimeout != null) {
@@ -243,31 +334,311 @@ class XSelect {
       }, ordered: ordered);
 }
 
+/// Builder for composing async selections with type-safe operations.
+///
+/// Provides a fluent DSL for racing multiple async operations. Each operation
+/// type has specialized methods with automatic resource cleanup and cancellation.
+///
+/// ## Available Operations
+///
+/// **Channel Operations:**
+/// - [onRecv] - Wait for any channel message (Success/Failure)
+/// - [onRecvValue] - Wait only for successful channel messages
+/// - [onRecvError] - Wait only for channel errors
+///
+/// **Future Operations:**
+/// - [onFuture] - Race a Future with automatic cancellation
+/// - [onFutureValue] - Race a Future, ignore errors
+/// - [onFutureError] - Race a Future, only handle errors
+///
+/// **Stream Operations:**
+/// - [onStream] - Wait for next stream event
+/// - [onStreamDone] - Wait for stream completion
+///
+/// **Timer Operations:**
+/// - [onTick] - Wait for timer tick
+/// - [onDelay] - Add fixed delay branch
+/// - [timeout] - Add timeout to the entire selection
+///
+/// **Example - Multi-source data processing:**
+/// ```dart
+/// final processor = DataProcessor();
+///
+/// while (processor.isRunning) {
+///   final action = await XSelect.run<ProcessorAction>((s) => s
+///     // High-priority user commands
+///     ..onRecvValue(userCommands, (cmd) => ProcessorAction.userCommand(cmd))
+///
+///     // Background data processing
+///     ..onStream(dataStream, (data) => ProcessorAction.processData(data))
+///
+///     // Periodic maintenance
+///     ..onTick(maintenanceTicker, () => ProcessorAction.maintenance())
+///
+///     // API health checks
+///     ..onFuture(healthCheck(), (status) => ProcessorAction.healthUpdate(status))
+///
+///     // Graceful shutdown on idle
+///     ..timeout(Duration(minutes: 10), () => ProcessorAction.shutdown())
+///   );
+///
+///   await processor.handleAction(action);
+/// }
+/// ```
 class SelectBuilder<R> {
   final List<(_Branch<R> b, bool Function()? guard)> _branches = [];
   Duration? _timeout;
   FutureOr<R> Function()? _onTimeout;
   bool _ordered = false;
 
+  /// Race a Future - handles both success and error cases.
+  ///
+  /// The future is automatically canceled if another branch wins the race.
+  /// Use this when you need to handle both successful completion and errors.
+  ///
+  /// **Parameters:**
+  /// - [fut]: Future to race
+  /// - [body]: Function to call with the future's result
+  /// - [tag]: Optional tag for debugging
+  /// - [if_]: Optional guard condition
+  ///
+  /// **Example:**
+  /// ```dart
+  /// await XSelect.run<String>((s) => s
+  ///   ..onFuture(apiCall(), (result) => 'API returned: $result')
+  ///   ..onFuture(fallbackCall(), (result) => 'Fallback: $result')
+  ///   ..timeout(Duration(seconds: 5), () => 'timeout')
+  /// );
+  /// ```
   SelectBuilder<R> onFuture<T>(Future<T> fut, FutureOr<R> Function(T) body,
       {Object? tag, bool Function()? if_}) {
     _branches.add((_FutureBranch<T, R>(fut, body, tag: tag), if_));
     return this;
   }
 
+  /// Race a Future, but only handle successful completion.
+  ///
+  /// Errors from the future are ignored. Use when you only care about
+  /// successful results and want other branches to handle error cases.
+  ///
+  /// **Example:**
+  /// ```dart
+  /// await XSelect.run<String>((s) => s
+  ///   ..onFutureValue(loadUserData(), (user) => 'User: ${user.name}')
+  ///   ..onFutureValue(loadFallbackData(), (data) => 'Fallback: $data')
+  ///   ..delay(Duration(seconds: 3), () => 'No data available')
+  /// );
+  /// ```
+  SelectBuilder<R> onFutureValue<T>(Future<T> fut, FutureOr<R> Function(T) body,
+      {Object? tag, bool Function()? if_}) {
+    return onFuture<T>(fut, body, tag: tag, if_: if_);
+  }
+
+  /// Race a Future, but only handle errors.
+  ///
+  /// Successful completion is ignored. Use for error monitoring or
+  /// when you want to react only to failure cases.
+  ///
+  /// **Example:**
+  /// ```dart
+  /// await XSelect.run<String>((s) => s
+  ///   ..onStream(dataStream, (data) => 'Processing: $data')
+  ///   ..onFutureError(backgroundTask(), (error) => 'Task failed: $error')
+  ///   ..timeout(Duration(seconds: 30), () => 'timeout')
+  /// );
+  /// ```
+  SelectBuilder<R> onFutureError<T>(
+      Future<T> fut, FutureOr<R> Function(Object error) body,
+      {Object? tag, bool Function()? if_}) {
+    return onFuture<T>(fut.catchError((Object e) => throw e),
+        (_) => throw StateError('onFutureError should not handle success'),
+        tag: tag, if_: if_);
+  }
+
+  /// Race a Stream - waits for the next event.
+  ///
+  /// Automatically cancels the stream subscription if another branch wins.
+  /// Use this when you want to react to the next event from a stream.
+  ///
+  /// **Parameters:**
+  /// - [stream]: Stream to listen to
+  /// - [body]: Function to call with the next stream event
+  /// - [tag]: Optional tag for debugging
+  /// - [if_]: Optional guard condition
+  ///
+  /// **Example:**
+  /// ```dart
+  /// await XSelect.run<String>((s) => s
+  ///   ..onStream(userClicks, (click) => 'User clicked: $click')
+  ///   ..onStream(keyboardEvents, (key) => 'Key pressed: $key')
+  ///   ..onStream(networkEvents, (event) => 'Network: $event')
+  ///   ..timeout(Duration(seconds: 30), () => 'No user activity')
+  /// );
+  /// ```
   SelectBuilder<R> onStream<T>(Stream<T> stream, FutureOr<R> Function(T) body,
       {Object? tag, bool Function()? if_}) {
     _branches.add((_StreamBranch<T, R>(stream, body, tag: tag), if_));
     return this;
   }
 
-  SelectBuilder<R> onReceiver<T>(
+  /// Race a Stream - waits for completion (done event).
+  ///
+  /// Triggers when the stream completes normally or with an error.
+  /// Use this to react to stream lifecycle events.
+  ///
+  /// **Example:**
+  /// ```dart
+  /// await XSelect.run<String>((s) => s
+  ///   ..onStream(dataStream, (data) => 'Data: $data')
+  ///   ..onStreamDone(dataStream, () => 'Stream completed')
+  ///   ..timeout(Duration(minutes: 5), () => 'Stream timeout')
+  /// );
+  /// ```
+  SelectBuilder<R> onStreamDone<T>(
+      Stream<T> stream, FutureOr<R> Function() body,
+      {Object? tag, bool Function()? if_}) {
+    return onFuture<void>(stream.drain(), (_) => body(), tag: tag, if_: if_);
+  }
+
+  /// Race a channel receiver - handles both success and error cases.
+  ///
+  /// Waits for any message from the channel (successful value or error).
+  /// Use this when you need to handle both normal messages and channel errors.
+  ///
+  /// **Parameters:**
+  /// - [rx]: Receiver to wait on
+  /// - [body]: Function to call with the RecvResult
+  /// - [tag]: Optional tag for debugging
+  /// - [if_]: Optional guard condition
+  ///
+  /// **Example:**
+  /// ```dart
+  /// await XSelect.run<String>((s) => s
+  ///   ..onRecv(taskResults, (result) => {
+  ///       result.valueOrNull != null
+  ///         ? 'Task completed: ${result.valueOrNull}'
+  ///         : 'Task failed: ${result.errorOrNull}'
+  ///     })
+  ///   ..timeout(Duration(minutes: 1), () => 'Task timeout')
+  /// );
+  /// ```
+  ///
+  /// **See also:**
+  /// - [onRecv] - Alias for this method
+  /// - [onRecvValue] - Only handle successful messages
+  /// - [onRecvError] - Only handle error messages
+  SelectBuilder<R> onRecv<T>(
       Receiver<T> rx, FutureOr<R> Function(RecvResult<T>) body,
       {Object? tag, bool Function()? if_}) {
     _branches.add((_ReceiverBranch<T, R>(rx, body, tag: tag), if_));
     return this;
   }
 
+  /// Race a channel receiver - only handle successful messages.
+  ///
+  /// Waits for successful values from the channel, ignoring errors.
+  /// Use when you only care about valid data and want other branches
+  /// to handle error conditions.
+  ///
+  /// **Example:**
+  /// ```dart
+  /// await XSelect.run<String>((s) => s
+  ///   ..onRecvValue(userInputs, (input) => 'User: $input')
+  ///   ..onRecvValue(apiResponses, (response) => 'API: $response')
+  ///   ..onRecvError(errorChannel, (error) => 'Error: $error')
+  ///   ..timeout(Duration(seconds: 10), () => 'No activity')
+  /// );
+  /// ```
+  SelectBuilder<R> onRecvValue<T>(Receiver<T> rx, FutureOr<R> Function(T) body,
+      {Object? tag,
+      FutureOr<R> Function()? onDisconnected,
+      bool Function()? if_}) {
+    return onRecv<T>(rx, (result) {
+      if (result.hasValue) {
+        return body(result.valueOrNull as T);
+      }
+      if (result.isDisconnected && onDisconnected != null) {
+        return onDisconnected();
+      }
+      return Future<R>.error(StateError('Unexpected RecvResult: $result'));
+    }, tag: tag, if_: if_ ?? () => !rx.isDisconnected);
+  }
+
+  /// Race a channel receiver - only handle error messages.
+  ///
+  /// Waits for error conditions from the channel, ignoring successful values.
+  /// Use for error monitoring and handling failure conditions.
+  ///
+  /// **Example:**
+  /// ```dart
+  /// await XSelect.run<String>((s) => s
+  ///   ..onStream(dataStream, (data) => 'Processing: $data')
+  ///   ..onRecvError(errorChannel, (error) => 'Error detected: $error')
+  ///   ..timeout(Duration(minutes: 1), () => 'All systems normal')
+  /// );
+  /// ```
+  SelectBuilder<R> onRecvError<T>(
+      Receiver<T> rx, FutureOr<R> Function(Object error) body,
+      {Object? tag, bool Function()? if_}) {
+    return onRecv<T>(rx, (result) {
+      if (result.hasError) {
+        return body(result);
+      }
+      return Future<R>.error(StateError('Unexpected RecvResult: $result'));
+    }, tag: tag, if_: if_ ?? () => !rx.isDisconnected);
+  }
+
+  /// Wait for a channel send operation to complete.
+  ///
+  /// Races a send operation on a channel sender. Use this when you need to
+  /// coordinate sending with other async operations or implement backpressure.
+  ///
+  /// **Parameters:**
+  /// - [sender]: Sender to use for the send operation
+  /// - [value]: Value to send
+  /// - [body]: Function to call when send completes
+  /// - [tag]: Optional tag for debugging
+  /// - [if_]: Optional guard condition
+  ///
+  /// **Example:**
+  /// ```dart
+  /// // Producer with flow control
+  /// await XSelect.run<String>((s) => s
+  ///   ..onRecvValue(controlChannel, (cmd) => 'Command: $cmd')
+  ///   ..onSend(outputChannel, processedData, () => 'Data sent')
+  ///   ..timeout(Duration(seconds: 10), () => 'Send timeout')
+  /// );
+  /// ```
+  SelectBuilder<R> onSend<T>(
+      Sender<T> sender, T value, FutureOr<R> Function() body,
+      {Object? tag, bool Function()? if_}) {
+    return onFuture(sender.send(value), (_) => body(), tag: tag, if_: if_);
+  }
+
+  /// Add a fixed delay branch to the selection.
+  ///
+  /// Creates a timer that fires once after the specified duration.
+  /// Use this for timeouts, periodic actions, or adding delays to processing.
+  ///
+  /// **Parameters:**
+  /// - [d]: Duration to wait before firing
+  /// - [body]: Function to call when the timer fires
+  /// - [tag]: Optional tag for debugging
+  /// - [if_]: Optional guard condition
+  ///
+  /// **Example:**
+  /// ```dart
+  /// await XSelect.run<String>((s) => s
+  ///   ..onStream(fastStream, (data) => 'Fast: $data')
+  ///   ..delay(Duration(milliseconds: 100), () => 'Throttled')
+  ///   ..delay(Duration(seconds: 1), () => 'Periodic check')
+  ///   ..delay(Duration(seconds: 30), () => 'Timeout reached')
+  /// );
+  /// ```
+  ///
+  /// **See also:**
+  /// - [timeout] - Global timeout for the entire selection
+  /// - [onTick] - For recurring timer events
   SelectBuilder<R> onDelay(Duration d, FutureOr<R> Function() body,
       {Object? tag, bool Function()? if_}) {
     _branches.add((_TimerBranch<R>(d, body, tag: tag), if_));
@@ -282,7 +653,33 @@ class SelectBuilder<R> {
     return this;
   }
 
-  /// Ticking helper built on top of [Arm].
+  /// Wait for a ticker to fire.
+  ///
+  /// Tickers provide recurring timer events. Use this for periodic operations,
+  /// heartbeats, or any regular interval-based processing.
+  ///
+  /// **Parameters:**
+  /// - [ticker]: Ticker instance to wait on
+  /// - [body]: Function to call when the ticker fires
+  /// - [tag]: Optional tag for debugging
+  /// - [if_]: Optional guard condition
+  ///
+  /// **Example:**
+  /// ```dart
+  /// final heartbeat = Ticker.every(Duration(seconds: 5));
+  /// final monitor = Ticker.every(Duration(minutes: 1));
+  ///
+  /// while (server.isRunning) {
+  ///   final action = await XSelect.run<ServerAction>((s) => s
+  ///     ..onRecvValue(requests, (req) => ServerAction.handleRequest(req))
+  ///     ..onTick(heartbeat, () => ServerAction.heartbeat())
+  ///     ..onTick(monitor, () => ServerAction.healthCheck())
+  ///     ..timeout(Duration(minutes: 30), () => ServerAction.idleShutdown())
+  ///   );
+  ///
+  ///   await server.processAction(action);
+  /// }
+  /// ```
   SelectBuilder<R> onTick(
     Ticker ticker,
     FutureOr<R> Function() body, {
@@ -292,7 +689,26 @@ class SelectBuilder<R> {
     return onArm<void>(() => ticker.arm(), (_) => body(), tag: tag, if_: if_);
   }
 
-  /// Add a global timeout branch.
+  /// Add a global timeout to the entire selection.
+  ///
+  /// Unlike [delay] or [onDelay], this applies to the entire selection.
+  /// If no other branch completes within the timeout duration, the timeout
+  /// branch will fire and all other operations will be canceled.
+  ///
+  /// **Parameters:**
+  /// - [d]: Duration before timeout
+  /// - [body]: Function to call on timeout
+  ///
+  /// **Example:**
+  /// ```dart
+  /// // Network request with fallback
+  /// final result = await XSelect.run<ApiResponse>((s) => s
+  ///   ..onFuture(primaryApi(), (response) => response)
+  ///   ..onFuture(secondaryApi(), (response) => response)
+  ///   ..onFuture(cacheApi(), (response) => response)
+  ///   ..timeout(Duration(seconds: 30), () => ApiResponse.timeout())
+  /// );
+  /// ```
   SelectBuilder<R> timeout(Duration d, FutureOr<R> Function() body) {
     _timeout = d;
     _onTimeout = body;
@@ -300,6 +716,20 @@ class SelectBuilder<R> {
   }
 
   /// Preserve declaration order instead of applying fairness rotation.
+  ///
+  /// By default, XSelect uses fairness rotation to prevent starvation.
+  /// Call this method to evaluate branches in the order they were declared.
+  ///
+  /// **Example:**
+  /// ```dart
+  /// // Process high-priority channel first, then others
+  /// await XSelect.run<String>((s) => s
+  ///   ..onRecvValue(highPriority, (msg) => 'High: $msg')
+  ///   ..onRecvValue(mediumPriority, (msg) => 'Medium: $msg')
+  ///   ..onRecvValue(lowPriority, (msg) => 'Low: $msg')
+  ///   ..ordered()  // Prioritize in declaration order
+  /// );
+  /// ```
   SelectBuilder<R> ordered() {
     _ordered = true;
     return this;
@@ -439,32 +869,5 @@ class Ticker {
   void reset({DateTime? startAt}) {
     final now = DateTime.now();
     _nextAt = (startAt ?? now).add(period);
-  }
-}
-
-extension SelectOnRecv<R> on SelectBuilder<R> {
-  /// Convenience variant that maps the `RecvResult<T>` into value/disconnected cases.
-  SelectBuilder<R> onRecvValue<T>(
-    Receiver<T> rx,
-    FutureOr<R> Function(T value) onValue, {
-    FutureOr<R> Function()? onDisconnected,
-    Object? tag,
-    bool Function()? if_,
-  }) {
-    FutureOr<R> body(RecvResult<T> res) {
-      if (res is RecvOk<T>) return onValue(res.valueOrNull as T);
-      if (res is RecvErrorDisconnected) {
-        if (onDisconnected != null) {
-          return onDisconnected();
-        }
-      }
-      return Future<R>.error(StateError('Unexpected RecvResult: $res'));
-    }
-
-    _branches.add(
-      (_ReceiverBranch<T, R>(rx, body, tag: tag), () => !rx.isDisconnected),
-    );
-
-    return this;
   }
 }

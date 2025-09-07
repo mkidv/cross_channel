@@ -5,7 +5,6 @@ import 'package:cross_channel/src/result.dart';
 /// On last sender drop + empty buffer, receivers are completed with
 /// `RecvErrorDisconnected`. On last receiver drop, pending receivers are failed
 /// and the buffer is cleared; senders are awakened.
-///
 mixin ChannelLifecycle<T, Self extends Object> {
   ChannelBuffer<T> get buf;
 

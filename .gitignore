@@ -11,11 +11,13 @@ lcov.info
 *.log
 
 # IDE / OS
+.continue/
 .idea/
 .vscode/
 *.iml
 .DS_Store
 Thumbs.db
+WARP.md
 
 # Bench
 bench/

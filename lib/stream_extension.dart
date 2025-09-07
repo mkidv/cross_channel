@@ -3,14 +3,66 @@ import 'dart:async';
 import 'package:cross_channel/src/core.dart';
 import 'package:cross_channel/src/result.dart';
 
+/// Bridge between channels and Dart's Stream ecosystem.
+///
+/// Essential for integrating channels with Flutter widgets, existing
+/// stream-based APIs, and reactive programming patterns. Converts between
+/// single-subscription channel streams and multi-listener broadcast streams.
 extension StreamReceiverX<T> on KeepAliveReceiver<T> {
-  /// Bridge utilities between channels and broadcast streams.
+  /// Convert a channel receiver to a broadcast stream for multiple listeners.
   ///
-  /// `KeepAliveReceiver.toBroadcastStream(...)` turns a single-subscription
-  /// receiver into a `StreamController.broadcast`. When `waitForListeners` and
-  /// `stopWhenNoListeners` are both true, the underlying subscription is paused
-  /// while there are no listeners. Note: broadcast streams do not support
-  /// `onPause/onResume` callbacks; only `onListen/onCancel` are used here.
+  /// Perfect for integrating channels with Flutter widgets that expect
+  /// broadcast streams, or when multiple components need to listen to
+  /// the same channel data.
+  ///
+  /// **Parameters:**
+  /// - [waitForListeners]: If `true`, doesn't start consuming until first listener
+  /// - [stopWhenNoListeners]: If `true`, pauses consumption when no listeners
+  /// - [closeReceiverOnDone]: If `true`, closes the receiver when stream ends
+  /// - [sync]: If `true`, events are delivered synchronously
+  ///
+  /// **Flutter Integration:**
+  /// ```dart
+  /// // Progress updates in multiple widgets
+  /// final (tx, rx) = XChannel.mpscLatest<double>();
+  /// final broadcast = rx.toBroadcastStream();
+  ///
+  /// // Multiple StreamBuilders can listen
+  /// StreamBuilder<double>(
+  ///   stream: broadcast,
+  ///   builder: (context, snap) => ProgressIndicator(value: snap.data),
+  /// )
+  ///
+  /// StreamBuilder<double>(
+  ///   stream: broadcast,
+  ///   builder: (context, snap) => Text('Progress: ${(snap.data ?? 0) * 100}%'),
+  /// )
+  /// ```
+  ///
+  /// **Reactive Programming:**
+  /// ```dart
+  /// // Event processing with multiple subscribers
+  /// final (tx, rx) = XChannel.mpsc<UserEvent>();
+  /// final broadcast = rx.toBroadcastStream();
+  ///
+  /// // Analytics subscriber
+  /// broadcast.listen((event) => analytics.track(event));
+  ///
+  /// // UI updates subscriber
+  /// broadcast.listen((event) => updateUI(event));
+  ///
+  /// // Logging subscriber
+  /// broadcast.listen((event) => logger.info('Event: $event'));
+  /// ```
+  ///
+  /// **Resource Management:**
+  /// ```dart
+  /// // Efficient resource usage - pause when no listeners
+  /// final broadcast = rx.toBroadcastStream(
+  ///   waitForListeners: true,    // Don't start until needed
+  ///   stopWhenNoListeners: true, // Pause when unused
+  /// );
+  /// ```
   ///
   Stream<T> toBroadcastStream({
     bool waitForListeners = false,
@@ -72,10 +124,64 @@ extension StreamReceiverX<T> on KeepAliveReceiver<T> {
   }
 }
 
+/// Bridge from Dart Streams to channel senders.
+///
+/// Convert any Dart Stream into channel data, perfect for integrating
+/// existing stream-based APIs with channel processing pipelines.
 extension SenderStreamX<T> on Stream<T> {
-  /// Pushes all items from this stream into `KeepAliveSender<T>`.
-  /// If the channel is full and `dropWhenFull == true`, values are dropped.
-  /// Closes the sender when the stream completes if `closeSenderOnDone == true`.
+  /// Redirect all stream data into a channel sender.
+  ///
+  /// Efficiently pipes stream data into channels with configurable backpressure
+  /// handling. Essential for integrating HTTP responses, file streams, or any
+  /// existing Stream-based API with channel processing.
+  ///
+  /// **Parameters:**
+  /// - [tx]: The channel sender to receive stream data
+  /// - [dropWhenFull]: If `true`, drop items when channel is full (for bounded channels)
+  /// - [closeSenderOnDone]: If `true`, close sender when stream completes
+  ///
+  /// **HTTP Integration:**
+  /// ```dart
+  /// // Stream HTTP responses into channel processing
+  /// final (tx, rx) = XChannel.mpsc<HttpResponse>(capacity: 100);
+  ///
+  /// // Redirect HTTP stream to channel
+  /// final responseStream = httpClient.get(url).asStream();
+  /// await responseStream.redirectToSender(tx);
+  ///
+  /// // Process responses in channel consumer
+  /// await for (final response in rx.stream()) {
+  ///   final data = await response.readAsString();
+  ///   await processData(data);
+  /// }
+  /// ```
+  ///
+  /// **File Processing:**
+  /// ```dart
+  /// // Stream file lines into batch processor
+  /// final (tx, rx) = XChannel.mpsc<String>(capacity: 1000);
+  ///
+  /// final fileStream = File('large_file.txt')
+  ///   .openRead()
+  ///   .transform(utf8.decoder)
+  ///   .transform(LineSplitter());
+  ///
+  /// // Redirect file lines to channel
+  /// await fileStream.redirectToSender(tx);
+  ///
+  /// // Batch process lines
+  /// final batch = await rx.recvAll(max: 100);
+  /// await processBatch(batch.toList());
+  /// ```
+  ///
+  /// **Backpressure Strategies:**
+  /// ```dart
+  /// // Strategy 1: Wait for space (reliable)
+  /// await stream.redirectToSender(tx, dropWhenFull: false);
+  ///
+  /// // Strategy 2: Drop on full (high throughput)
+  /// await stream.redirectToSender(tx, dropWhenFull: true);
+  /// ```
   ///
   Future<void> redirectToSender(
     KeepAliveSender<T> tx, {

@@ -44,8 +44,8 @@ dart pub add cross_channel
 ### High-Level (XChannel)
 
 ```dart
-final (tx, rx) = XChannel.mpsc<T>(capacity: 1024, dropPolicy: DropPolicy.block);
-final (tx, rx) = XChannel.mpmc<T>(capacity: 1024, dropPolicy: DropPolicy.oldest);
+final (tx, rx) = XChannel.mpsc<T>(capacity: 1024, policy: DropPolicy.block);
+final (tx, rx) = XChannel.mpmc<T>(capacity: 1024, policy: DropPolicy.oldest);
 final (tx, rx) = XChannel.mpscLatest<T>(); // MPSC latest-only
 final (tx, rx) = XChannel.mpmcLatest<T>(); // MPMC latest-only (competitive)
 final (tx, rx) = XChannel.spsc<int>(capacity: 1024); // pow2 rounded internally
@@ -61,14 +61,14 @@ import 'package:cross_channel/mpsc.dart';
 final (tx, rx) = Mpsc.unbounded<T>(); // chunked=true (default)
 final (tx, rx) = Mpsc.unbounded<T>(chunked: false); // simple unbounded
 final (tx, rx) = Mpsc.bounded<T>( 1024);
-final (tx, rx) = Mpsc.channel<T>(capacity: 1024, dropPolicy: DropPolicy.oldest, onDrop: (d) {});
+final (tx, rx) = Mpsc.channel<T>(capacity: 1024, policy: DropPolicy.oldest, onDrop: (d) {});
 final (tx, rx) = Mpsc.latest<T>();
 
 import 'package:cross_channel/mpmc.dart';
 final (tx, rx) = Mpmc.unbounded<T>(); // chunked=true (default)
 final (tx, rx) = Mpmc.unbounded<T>(chunked: false); // simple unbounded
 final (tx, rx) = Mpmc.bounded<T>(1024);
-final (tx, rx) = Mpmc.channel<T>(capacity: 1024, dropPolicy: DropPolicy.oldest, onDrop: (d) {});
+final (tx, rx) = Mpmc.channel<T>(capacity: 1024, policy: DropPolicy.oldest, onDrop: (d) {});
 final (tx, rx) = Mpmc.latest<T>();
 
 import 'package:cross_channel/spsc.dart';
@@ -187,7 +187,7 @@ void main() async {
 ```dart
 final (tx, rx) = XChannel.mpsc<int>(
   capacity: 1024,
-  dropPolicy: DropPolicy.oldest, // or DropPolicy.newest
+  policy: DropPolicy.oldest, // or DropPolicy.newest
   onDrop: (d) => print('dropped $d'),
 );
 ```
@@ -239,9 +239,20 @@ await XSelect.run<void>((s) => s
 );
 ```
 
-## 🧰 Select (futures/streams/receivers/timers)
+## 🧰 XSelect (futures/streams/receivers/timers)
 
 `XSelect` lets you race multiple asynchronous branches and cancel the losers.
+
+Cheat-sheet :
+
+- Channels: onRecv, onRecvValue, onRecvError
+- Futures: onFuture, onFutureValue, onFutureError
+- Streams: onStream, onStreamDone
+- Timers: onTick(Ticker), onDelay / delay
+- Sending: onSend(sender, value, ...)
+- Arms (sync fast-path): onArm(Arm.immediate|pending), XSelect.syncRun(...)
+- Guards: if\_: () => bool to enable/disable a branch
+- Fairness vs order: fairness rotation by default; use .ordered() to preserve declaration order
 
 ```dart
 import 'package:cross_channel/cross_channel.dart';
@@ -264,7 +275,7 @@ Future<void> main() async {
       tag: 'R',
     )
     // full control over RecvResult
-    ..onReceiver<int>(
+    ..onRecv<int>(
       rx,
       (res) {
         if (res is RecvOk<int>) return 'recv:${res.value}';
@@ -294,6 +305,7 @@ Notes:
 - returns the _first resolved_ branch and cancels the rest.
 - ordered = true forces order, otherwise we use fairness rotation
 - `syncRun` only uses immediate arms, aka non blocking
+- Use **`if_`** to conditionally include a branch without rebuilding the selection.
 
 ## 🔗 Interop
 
@@ -381,7 +393,7 @@ tx.trySendAll(iterable);        // best-effort
 rx.tryRecvAll(max: 128);        // burst non-blocking drain
 await rx.recvAll(idle: Duration(milliseconds: 1), max: 1024);
 
-// Cancelable receive (KeepAliveReceiver only):
+// Cancelable receive (all receivers):
 final (fut, cancel) = rx.recvCancelable();
 cancel(); // attempts to abort the wait if still pending
 ```

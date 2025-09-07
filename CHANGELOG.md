@@ -13,9 +13,33 @@
 
 ---
 
+## [0.7.2] – 2025-09-07
+
+### Added
+
+- **XSelect**
+  - Builder API:
+    - New `onFutureValue`, `onFutureError`, `onStreamDone` — convenience variants.
+    - New `onDelay` (+ alias `delay`) for single-shot timers.
+    - New `onSend(sender, value, ...)` to race a send completion.
+- **Docs & inline comments:** extensive `///` API docs and usage examples across whole package
+
+### Changed
+
+- **XSelect**
+  - Fairness & ordering: default start-index rotation for fairness (prevents starvation); call `.ordered()` to preserve declaration order.
+  - Cancellation: consistent loser cleanup (cancel timers/subs, ignore late futures); clearer error propagation (use of `Future.error` and `Zone`).
+
+### Fixed
+
+- Synchronous resolution path: if an `Arm.immediate` fires during `attach`, the selection resolves without over-subscribing other branches.
+
+---
+
 ## [0.7.1] – 2025-09-06
 
 ### Fixed
+
 - `pubspec.yaml`: expanded `description` to satisfy pub.dev length checks.
 
 ---
