@@ -32,11 +32,11 @@ export 'src/buffers.dart' show DropPolicy, OnDrop;
 /// - **Request handling**: Multiple clients → single server
 ///
 /// ## Performance Characteristics
-/// - **Producer throughput**: ~200-500ns per send (multi-threaded)
-/// - **Consumer throughput**: ~50-150ns per receive (single-threaded)
-/// - **Memory efficient**: Chunked buffers for unbounded channels
-/// - **Scalable**: Performance degrades gracefully with producer count
-/// - **Cache-friendly**: Consumer-side optimizations for sequential access
+/// - **Good throughput**: ~535-950ns per operation (see benchmarks for details)
+/// - **Latest-only mode**: Extremely fast ~7ns per operation for coalescing buffers
+/// - **Memory efficient**: Chunked buffers available for unbounded channels
+/// - **Scalable**: Designed to handle multiple concurrent producers
+/// - **Efficient design**: Optimized for producer-consumer scenarios
 ///
 /// ## Usage Patterns
 ///
@@ -336,17 +336,17 @@ final class _MpscCore<T> extends ChannelCore<T, _MpscCore<T>> {
   bool get allowMultiReceivers => false;
 }
 
-/// Thread-safe sender for MPSC channels with cloning capability.
+/// Multi-producer sender for MPSC channels with cloning capability.
 ///
-/// Allows multiple threads to send concurrently to a single consumer.
+/// Allows multiple producers to send concurrently to a single consumer.
 /// Senders can be cloned to create additional producer handles without
 /// affecting the underlying channel.
 ///
-/// ## Thread Safety
-/// - **Concurrent sends**: Multiple threads can call [send] simultaneously
-/// - **Clone safety**: [clone] can be called from any thread
-/// - **Close coordination**: Channel disconnects when ALL senders close
-/// - **State isolation**: Each sender tracks its own closed state
+/// ## Key Features
+/// - **Concurrent sends**: Multiple senders can send simultaneously
+/// - **Clone support**: Create additional sender handles with [clone]
+/// - **Coordinated shutdown**: Channel disconnects when ALL senders close
+/// - **Individual state**: Each sender tracks its own closed state
 ///
 /// ## Lifecycle Management
 /// - **Reference counting**: Channel stays open while any sender exists
@@ -413,16 +413,16 @@ final class MpscSender<T> implements CloneableSender<T> {
   }
 }
 
-/// Single consumer for MPSC channels with optimized receive operations.
+/// Single consumer for MPSC channels with efficient receive operations.
 ///
-/// Receives messages from multiple producers in FIFO order. Optimized for
-/// single-threaded consumption with minimal overhead.
+/// Receives messages from multiple producers in FIFO order. Designed for
+/// single-consumer scenarios with good performance.
 ///
-/// ## Performance Characteristics
-/// - **No consumer coordination**: Single consumer eliminates synchronization overhead
-/// - **Sequential access**: Cache-friendly memory access patterns
-/// - **Batching support**: [ReceiverDrainX] extensions for bulk operations
-/// - **Stream integration**: Seamless async iteration support
+/// ## Key Features
+/// - **Single consumer**: Optimized for one consumer, multiple producers
+/// - **FIFO ordering**: Messages received in first-in, first-out order
+/// - **Batching support**: Extensions available for bulk operations
+/// - **Stream integration**: Supports async iteration patterns
 ///
 /// ## Usage Guidelines
 /// - **Single consumer only**: Only one thread should use this receiver

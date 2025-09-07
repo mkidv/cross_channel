@@ -37,8 +37,8 @@ export 'src/buffers.dart' show DropPolicy, OnDrop;
 ///
 /// ## Performance Considerations
 /// - **Coordination overhead**: Higher than MPSC due to consumer coordination
-/// - **Producer throughput**: ~300-600ns per send (with consumer contention)
-/// - **Consumer throughput**: ~100-300ns per receive (with coordination)
+/// - **Good throughput**: ~525-937ns per operation (see benchmarks for details)
+/// - **Latest-only mode**: Very fast ~7-8ns per operation for coalescing buffers
 /// - **Scalability**: Performance may degrade with many consumers
 /// - **Memory efficiency**: Shared buffer across all consumers
 ///
@@ -377,24 +377,23 @@ final class _MpmcCore<T> extends ChannelCore<T, _MpmcCore<T>> {
   bool get allowMultiReceivers => true;
 }
 
-/// Thread-safe sender for MPMC channels with full cloning support.
+/// Multi-producer sender for MPMC channels with full cloning support.
 ///
 /// Enables multiple producers to send concurrently to multiple competing consumers.
-/// Unlike MPSC senders, MPMC senders must coordinate with consumer competition,
-/// which introduces additional overhead but enables more flexible architectures.
+/// Handles coordination for competitive consumption patterns.
 ///
-/// ## Thread Safety & Coordination
-/// - **Multi-producer safe**: Multiple threads can send simultaneously
-/// - **Consumer coordination**: Handles competition between multiple consumers
-/// - **Clone safety**: [clone] creates independent sender handles safely
+/// ## Key Features
+/// - **Multi-producer support**: Multiple senders can send simultaneously
+/// - **Consumer coordination**: Manages competition between multiple consumers
+/// - **Clone support**: [clone] creates independent sender handles
 /// - **Reference counting**: Channel remains open while any sender exists
-/// - **Fair sending**: No producer starvation under load
+/// - **Load balancing**: Helps distribute work among consumers
 ///
-/// ## Performance Characteristics
-/// - **Higher overhead**: More coordination than MPSC due to consumer competition
-/// - **Scalable sending**: Performance degrades gracefully with producer count
-/// - **Consumer contention**: Performance affected by number of competing consumers
-/// - **Batching friendly**: Works well with batch sending extensions
+/// ## Performance Notes
+/// - **Additional overhead**: More coordination than MPSC due to multiple consumers
+/// - **Scalable design**: Handles multiple producers reasonably well
+/// - **Consumer impact**: Performance affected by number of competing consumers
+/// - **Batch support**: Compatible with batch sending extensions
 ///
 /// **Example - Distributed request processing:**
 /// ```dart
@@ -487,11 +486,11 @@ final class MpmcSender<T> implements CloneableSender<T> {
 /// - **Clone independence**: Each cloned receiver competes independently
 /// - **Stream single-use**: Each receiver's [stream] can only be used once
 ///
-/// ## Coordination Overhead
-/// - **Consumer synchronization**: Additional overhead compared to MPSC
-/// - **Fair scheduling**: Prevents any single consumer from monopolizing
-/// - **Graceful degradation**: Performance scales reasonably with consumer count
-/// - **Memory efficiency**: Shared buffer across all competing consumers
+/// ## Performance Notes
+/// - **Coordination overhead**: Additional overhead compared to MPSC
+/// - **Fair competition**: Designed to prevent consumer monopolization
+/// - **Reasonable scaling**: Performance scales reasonably with consumer count
+/// - **Shared buffer**: Memory efficient with shared buffer design
 ///
 /// ## Usage Guidelines
 /// - **Worker pools**: Perfect for distributing work among multiple workers

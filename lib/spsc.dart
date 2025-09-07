@@ -6,25 +6,24 @@ export 'src/core.dart'
     show SenderBatchX, SenderTimeoutX, ReceiverDrainX, ReceiverTimeoutX;
 export 'src/result.dart';
 
-/// SPSC (Single-Producer Single-Consumer) channels - Ultra-low latency communication.
+/// SPSC (Single-Producer Single-Consumer) channels - Efficient direct communication.
 ///
-/// The highest performance channel type in cross_channel. Optimized for scenarios
-/// where exactly one producer communicates with exactly one consumer. Uses lock-free
-/// algorithms and cache-friendly data structures for minimal overhead.
+/// A high-performance channel type in cross_channel. Optimized for scenarios
+/// where exactly one producer communicates with exactly one consumer. Uses efficient
+/// algorithms and data structures to minimize overhead.
 ///
 /// ## Performance Characteristics
-/// - **Ultra-low latency**: ~50-100ns per message on modern hardware
-/// - **Zero allocations**: After initial setup, no dynamic memory allocation
-/// - **Lock-free**: No mutex contention or system calls in the hot path
-/// - **Cache-friendly**: Uses SRSW (Single-Reader Single-Writer) ring buffer
-/// - **Zero-copy**: Direct memory access for primitive types
+/// - **Good performance**: Efficient message passing, typically ~550-570ns per operation (see benchmarks)
+/// - **Minimal allocations**: Optimized to reduce garbage collection pressure
+/// - **Efficient design**: Designed to avoid contention in the hot path
+/// - **Ring buffer**: Uses power-of-two sized SRSW (Single-Reader Single-Writer) ring buffer
 ///
 /// ## When to Use SPSC
-/// - High-frequency trading systems
-/// - Real-time audio/video processing
-/// - Game engines (main thread ↔ render thread)
-/// - IoT sensor data pipelines
-/// - Performance-critical producer-consumer patterns
+/// - Performance-sensitive producer-consumer scenarios
+/// - Data streaming between two components
+/// - Game logic (e.g., main thread ↔ render thread communication)
+/// - Sensor data processing
+/// - Any scenario requiring efficient 1:1 communication
 ///
 /// ## Constraints
 /// **EXACTLY one producer and one consumer required**
@@ -143,16 +142,15 @@ final class _SpscCore<T> extends ChannelCore<T, _SpscCore<T>> {
   bool get allowMultiReceivers => false;
 }
 
-/// Ultra-fast sender for SPSC channels.
+/// Efficient sender for SPSC channels.
 ///
-/// Provides lock-free, zero-allocation message sending for single-producer scenarios.
-/// Optimized for minimal latency and maximum throughput.
+/// Provides optimized message sending for single-producer scenarios.
+/// Designed for good performance and throughput.
 ///
 /// ## Performance Optimizations
-/// - **Lock-free operations**: No mutex or atomic operations in send path
-/// - **Cache-line optimization**: Minimizes false sharing between producer/consumer
-/// - **Branch prediction friendly**: Hot paths optimized for common cases
-/// - **Zero-copy sends**: Direct buffer writes for primitive types
+/// - **Efficient operations**: Optimized communication path
+/// - **Memory-friendly design**: Minimizes unnecessary overheads
+/// - **Optimized paths**: Core operations streamlined for performance
 ///
 /// ## Usage Guidelines
 /// - **Only ONE thread** should use this sender instance
@@ -203,15 +201,14 @@ final class SpscSender<T> implements KeepAliveSender<T> {
   }
 }
 
-/// Ultra-fast receiver for SPSC channels.
+/// Efficient receiver for SPSC channels.
 ///
-/// Provides lock-free, zero-allocation message receiving for single-consumer scenarios.
-/// Optimized for minimal latency and maximum throughput.
+/// Provides optimized message receiving for single-consumer scenarios.
+/// Designed for good performance and throughput.
 ///
 /// ## Performance Optimizations
-/// - **Lock-free operations**: No mutex or atomic operations in receive path
-/// - **Cache-line optimization**: Minimizes false sharing with producer
-/// - **Prefetch-friendly**: Memory access patterns optimized for CPU caches
+/// - **Efficient operations**: Optimized communication path
+/// - **Memory-friendly design**: Minimizes unnecessary overheads
 /// - **Single-subscription streams**: No overhead from multi-consumer coordination
 ///
 /// ## Usage Guidelines

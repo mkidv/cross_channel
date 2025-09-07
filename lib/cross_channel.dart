@@ -99,7 +99,7 @@ final class XChannel {
   ///
   /// **See also:**
   /// - [XChannel.mpmc] for multi-consumer work distribution
-  /// - [XChannel.spsc] for ultra-low latency single-producer scenarios
+  /// - [XChannel.spsc] for efficient single-producer scenarios
   /// - [XChannel.mpscLatest] for latest-only progress updates
   /// - [Mpsc.channel], [Mpsc.unbounded], [Mpsc.bounded] for low-level api
   static (MpscSender<T>, MpscReceiver<T>) mpsc<T>({
@@ -225,8 +225,8 @@ final class XChannel {
 
   /// Creates an SPSC (Single-Producer Single-Consumer) channel.
   ///
-  /// Ultra-low latency channel using lock-free ring buffer. Perfect for
-  /// high-frequency trading, game loops, or any hot path where performance is critical.
+  /// Efficient channel using ring buffer design. Good for performance-sensitive
+  /// scenarios where exactly one producer communicates with one consumer.
   /// **Capacity is automatically rounded up to the next power of 2.**
   ///
   /// **Parameters:**
@@ -235,7 +235,7 @@ final class XChannel {
   /// **Examples:**
   ///
   /// ```dart
-  /// // High-frequency data stream
+  /// // Performance-sensitive data stream
   /// final (tx, rx) = XChannel.spsc<double>(capacity: 1024);
   ///
   /// // Producer (single thread/isolate)
@@ -245,15 +245,15 @@ final class XChannel {
   ///
   /// // Consumer (single thread/isolate)
   /// await for (final value in rx.stream()) {
-  ///   processHighFrequencyData(value);
+  ///   processData(value);
   /// }
   /// ```
   ///
   /// **Performance Notes:**
-  /// - Fastest channel type (~1.8 Mops/s)
-  /// - Lock-free implementation
+  /// - High-performance channel type (~1.76-1.80 Mops/s, see benchmarks)
+  /// - Efficient implementation optimized for 1:1 communication
   /// - Requires exactly one producer and one consumer
-  /// - Ideal for inter-isolate communication
+  /// - Good for inter-isolate communication
   ///
   /// **See also:**
   /// - [XChannel.mpsc] for multiple producers

@@ -44,10 +44,10 @@ export 'src/result.dart';
 /// - **Configuration loading**: Load config once, access from multiple places
 ///
 /// ## Performance Characteristics
-/// - **Ultra-lightweight**: Minimal memory footprint (single value storage)
-/// - **Zero-copy delivery**: Direct value handoff without buffering
-/// - **Immediate resolution**: No queuing or batching overhead
-/// - **Cache-friendly**: Single memory location for value storage
+/// - **Lightweight**: Minimal memory footprint (single value storage)
+/// - **Efficient delivery**: Direct value handoff for single-value scenarios
+/// - **Good performance**: ~381-390ns per operation (see benchmarks)
+/// - **Simple storage**: Single memory location for value storage
 ///
 /// ## Usage Patterns
 ///
@@ -214,7 +214,7 @@ final class _OneShotCore<T> extends ChannelCore<T, _OneShotCore<T>> {
 ///
 /// **Characteristics:**
 /// - **Single-send**: Only one [send] call succeeds
-/// - **Immediate resolution**: Value delivered directly to waiting receivers
+/// - **Direct delivery**: Value delivered to waiting receivers
 /// - **Auto-disconnect**: Channel disconnects after successful send
 /// - **Type-safe**: Compile-time guarantees about value delivery
 ///

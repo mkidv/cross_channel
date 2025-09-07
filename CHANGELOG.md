@@ -13,6 +13,16 @@
 
 ---
 
+---
+
+## [0.7.3] – 2025-09-07
+
+### Changed
+
+- **Docs & inline comments:** extensive `///` API docs and usage examples across whole package
+
+---
+
 ## [0.7.2] – 2025-09-07
 
 ### Added
@@ -170,7 +180,7 @@
 - Batch helpers :
   - `sendAll`, `recvAll`, `trySendAll`, `tryRecvAll`
 
-## [0.4.0] – 2025-09-30
+## [0.4.0] – 2025-08-30
 
 ---
 
