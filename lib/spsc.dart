@@ -123,8 +123,9 @@ final class Spsc {
   ///   print('Received: $value');
   /// }
   /// ```
-  static (SpscSender<T>, SpscReceiver<T>) channel<T>(int capacity) {
-    final core = _SpscCore<T>(SrswBuffer<T>(capacity));
+  static (SpscSender<T>, SpscReceiver<T>) channel<T>(int capacity,
+      {String? metricsId}) {
+    final core = _SpscCore<T>(SrswBuffer<T>(capacity), metricsId: metricsId);
     final tx = core.attachSender((c) => SpscSender<T>._(c));
     final rx = core.attachReceiver((c) => SpscReceiver<T>._(c));
     return (tx, rx);
@@ -132,7 +133,8 @@ final class Spsc {
 }
 
 final class _SpscCore<T> extends ChannelCore<T, _SpscCore<T>> {
-  _SpscCore(this.buf);
+  _SpscCore(this.buf, {super.metricsId});
+
   @override
   final ChannelBuffer<T> buf;
 

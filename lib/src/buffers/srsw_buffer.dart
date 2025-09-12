@@ -47,10 +47,8 @@ final class SrswBuffer<T> implements ChannelBuffer<T> {
     final v = _buf[_head] as T;
     _buf[_head] = null;
     _head = (_head + 1) & _mask;
-    if (_spaceWaiter != null && !_isFull) {
-      _spaceWaiter!.complete();
-      _spaceWaiter = null;
-    }
+    _spaceWaiter?.complete();
+    _spaceWaiter = null;
     return v;
   }
 

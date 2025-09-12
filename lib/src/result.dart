@@ -15,6 +15,7 @@
 /// - [RecvErrorEmpty]: No values available (try again later)
 /// - [RecvErrorDisconnected]: No senders available
 /// - [RecvErrorTimeout]: Operation timed out
+/// - [RecvErrorCanceled]: Canceled pending receive (cancelable API)
 /// - [RecvErrorFailed]: Operation failed due to an exception
 ///
 /// ## Usage Patterns
@@ -25,10 +26,16 @@
 /// switch (result) {
 ///   case SendOk():
 ///     print('Sent successfully');
+///     break;
 ///   case SendErrorFull():
 ///     print('Channel full, try again later');
+///     break;
 ///   case SendErrorDisconnected():
 ///     print('No receivers available');
+///     break;
+///   case SendError():
+///     print('Unexpected error');
+///     break;
 /// }
 /// ```
 ///
@@ -261,7 +268,7 @@ final class RecvErrorFailed extends RecvError {
 ///   return; // No receivers
 /// }
 /// ```
-extension SendResultX<T> on SendResult {
+extension SendResultX on SendResult {
   /// `true` if the channel buffer was full (bounded channels only).
   bool get isFull => this is SendErrorFull;
 
@@ -308,11 +315,15 @@ extension RecvResultX<T> on RecvResult<T> {
   /// `true` if the operation failed due to an exception.
   bool get isFailed => this is RecvErrorFailed;
 
+  /// `true` if the pending receive was canceled.
+  bool get isCanceled => this is RecvErrorCanceled;
+
   /// `true` if a value was successfully received.
   bool get hasValue => this is RecvOk<T>;
 
   /// `true` if any error occurred (convenience for error handling).
-  bool get hasError => isEmpty || isDisconnected || isTimeout || isFailed;
+  bool get hasError =>
+      isEmpty || isDisconnected || isTimeout || isFailed || isCanceled;
 
   /// Extract the received value, or `null` if no value was received.
   ///
@@ -325,4 +336,15 @@ extension RecvResultX<T> on RecvResult<T> {
   /// }
   /// ```
   T? get valueOrNull => hasValue ? (this as RecvOk<T>).value : null;
+
+  /// Extract the received value or throw if not available.
+  T get value =>
+      hasValue ? (this as RecvOk<T>).value : throw StateError('no value');
+
+  /// Extract the error union as [RecvError], or `null` if success.
+  RecvError? get errorOrNull => hasError ? (this as RecvError) : null;
+
+  /// Extract the error union as [RecvError] or throw if success.
+  RecvError get error =>
+      hasError ? (this as RecvError) : throw StateError('no error');
 }

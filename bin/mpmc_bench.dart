@@ -1,481 +1,73 @@
 import 'dart:async';
 import 'package:cross_channel/mpmc.dart';
+import 'package:cross_channel/src/metrics.dart';
 import 'utils.dart';
 
 Future<void> main(List<String> args) async {
   final (iters, csv, _) = parseArgs(args);
 
+  MetricsConfig.enabled = true;
+  MetricsConfig.sampleLatency = true;
+  MetricsConfig.exporter = csv ? CsvExporter() : StdExporter();
+
   // Warmup
-  await _benchPingPong(1, 200_000, 'warmup');
+  await benchPipeline(Mpmc.bounded<int>(1, metricsId: 'warmup'), 200_000);
 
-  final results = <Stats>[];
+  await benchPingPong(
+      Mpmc.bounded<int>(1, metricsId: 'ping-pong cap=1 AB (1P/1C)'),
+      Mpmc.bounded<int>(1, metricsId: 'ping-pong cap=1 BA (1P/1C)'),
+      iters);
 
-  results.add(await _benchPingPong(
-    1,
-    iters,
-    'ping-pong cap=1 (1P/1C)',
-  ));
+  await benchPipeline(
+      Mpmc.bounded<int>(1024, metricsId: 'pipeline cap=1024 (1P/1C)'), iters);
 
-  results.add(
-    await _benchPipeline(
-      1024,
+  await benchPipeline(
+      Mpmc.unbounded<int>(
+          chunked: false, metricsId: 'pipeline unbounded (1P/1C)'),
+      iters);
+
+  await benchPipeline(
+      Mpmc.unbounded<int>(metricsId: 'pipeline unbounded chunked (1P/1C)'),
+      iters);
+
+  await benchMultiPipeline(
+      Mpmc.bounded<int>(1024, metricsId: 'multi-producers cap=1024 (4P/1C)'),
       iters,
-      'pipeline cap=1024 (1P/1C)',
-    ),
-  );
-
-  results.add(
-    await _benchPipeline(
-      null,
-      iters,
-      'pipeline unbounded (1P/1C)',
-    ),
-  );
-
-  results.add(
-    await _benchMultiProducers(
       4,
-      1024,
-      (iters / 4).round(),
-      'producers x4 cap=1024 (1C)',
-    ),
-  );
+      1);
 
-  results.add(
-    await _benchProducersConsumers(
+  await benchMultiPipeline(
+      Mpmc.bounded<int>(1024, metricsId: 'multi-producers cap=1024 (4P/4C)'),
+      iters,
       4,
+      4);
+
+  await benchPipeline(
+      Mpmc.bounded<int>(0, metricsId: 'pipeline rendezvous cap=0 (1P/1C)'),
+      iters);
+
+  await benchPipeline(
+      Mpmc.channel<int>(
+          capacity: 1024,
+          policy: DropPolicy.oldest,
+          metricsId: 'sliding oldest cap=1024 (1P/1C)'),
+      iters);
+
+  await benchPipeline(
+      Mpmc.channel<int>(
+          capacity: 1024,
+          policy: DropPolicy.newest,
+          metricsId: 'sliding newest cap=1024 (1P/1C)'),
+      iters);
+
+  await benchPipeline(Mpmc.latest<int>(metricsId: 'latestOnly (1P/1C)'), iters);
+
+  await benchMultiPipeline(
+      Mpmc.latest<int>(
+          metricsId: 'multi-producers cap=1024 (1P/4C competitive)'),
+      iters,
       4,
-      1024,
-      (iters / 4).round(),
-      'producers x4 / consumers x4 cap=1024',
-    ),
-  );
+      4);
 
-  results.add(
-    await _benchPipeline(
-      0,
-      iters,
-      'pipeline rendezvous cap=0 (1P/1C)',
-    ),
-  );
-
-  results.add(
-    await _benchSliding(
-      DropPolicy.oldest,
-      1024,
-      iters,
-      'sliding=oldest cap=1024 (1P/1C)',
-    ),
-  );
-
-  results.add(
-    await _benchSliding(
-      DropPolicy.newest,
-      1024,
-      iters,
-      'sliding=newest cap=1024 (1P/1C)',
-    ),
-  );
-
-  results.add(
-    await _benchLatestOnly1C(
-      iters,
-      'latestOnly (coalesce) (1P/1C)',
-    ),
-  );
-
-  results.add(
-    await _benchLatestOnly4C(
-      iters,
-      'latestOnly (coalesce) (1P/4C competitive)',
-    ),
-  );
-
-  if (csv) {
-    print('suite,case,mops,ns_per_op,max_latency_us,notes');
-    for (final r in results) {
-      print(r.toCsv(suite: 'MPMC'));
-    }
-    return;
-  }
-
-  print('\n=== MPMC Bench (Dart VM) $iters ===');
-  for (final r in results) {
-    print(r.toString());
-  }
-}
-
-Future<Stats> _benchPingPong(
-  int capacity,
-  int iters,
-  String label,
-) async {
-  final (tx, rx) = Mpmc.bounded<int>(capacity);
-
-  var remaining = iters;
-  var maxLatencyNs = 0;
-
-  final swAll = Stopwatch()..start();
-  final recvLoop = () async {
-    while (remaining > 0) {
-      final t0 = Stopwatch()..start();
-      final r = await rx.recv();
-      final t = t0.elapsedMicroseconds * 1000;
-      if (r.hasValue) {
-        if (t > maxLatencyNs) maxLatencyNs = t;
-        remaining--;
-      } else if (r.isDisconnected) {
-        break;
-      }
-    }
-  }();
-
-  final sendLoop = () async {
-    for (var i = 0; i < iters; i++) {
-      final s = await tx.send(i);
-      if (s.isDisconnected) break;
-    }
-    tx.close();
-  }();
-
-  await Future.wait([recvLoop, sendLoop]);
-  final elapsed = swAll.elapsed;
-
-  return Stats(label, iters, elapsed, maxLatencyNs);
-}
-
-Future<Stats> _benchPipeline(
-  int? capacity,
-  int iters,
-  String label,
-) async {
-  final (tx, rx) =
-      capacity == null ? Mpmc.unbounded<int>() : Mpmc.bounded<int>(capacity);
-
-  var received = 0;
-  var maxLatencyNs = 0;
-
-  final swAll = Stopwatch()..start();
-
-  final recvLoop = () async {
-    while (received < iters) {
-      final t0 = Stopwatch()..start();
-      final r = await rx.recv();
-      final t = t0.elapsedMicroseconds * 1000;
-      if (r.hasValue) {
-        if (t > maxLatencyNs) maxLatencyNs = t;
-        received++;
-      } else if (r.isDisconnected) {
-        break;
-      }
-    }
-  }();
-
-  final sendLoop = () async {
-    for (var i = 0; i < iters; i++) {
-      final s = await tx.send(i);
-      if (s.isDisconnected) break;
-    }
-    tx.close();
-  }();
-
-  await Future.wait([recvLoop, sendLoop]);
-  final elapsed = swAll.elapsed;
-
-  return Stats(label, iters, elapsed, maxLatencyNs);
-}
-
-Future<Stats> _benchMultiProducers(
-  int producers,
-  int capacity,
-  int itersPerProducer,
-  String label,
-) async {
-  final (tx0, rx) = Mpmc.bounded<int>(capacity);
-
-  final senders = <MpmcSender<int>>[tx0];
-  for (var i = 1; i < producers; i++) {
-    senders.add(senders.first.clone());
-  }
-
-  final total = itersPerProducer * producers;
-  var received = 0;
-  var maxLatencyNs = 0;
-
-  final swAll = Stopwatch()..start();
-
-  final recvLoop = () async {
-    while (received < total) {
-      final t0 = Stopwatch()..start();
-      final r = await rx.recv();
-      final t = t0.elapsedMicroseconds * 1000;
-      if (r.hasValue) {
-        if (t > maxLatencyNs) maxLatencyNs = t;
-        received++;
-      } else if (r.isDisconnected) {
-        break;
-      }
-    }
-  }();
-
-  final senderTasks = <Future<void>>[];
-  for (var i = 0; i < producers; i++) {
-    final s = senders[i];
-    senderTasks.add(() async {
-      for (var k = 0; k < itersPerProducer; k++) {
-        final res = await s.send(k);
-        if (res.isDisconnected) break;
-      }
-      s.close();
-    }());
-  }
-
-  await Future.wait([recvLoop, ...senderTasks]);
-  final elapsed = swAll.elapsed;
-
-  return Stats(label, total, elapsed, maxLatencyNs);
-}
-
-/// Producteurs + consommateurs multiples qui se partagent la file (work-stealing style).
-Future<Stats> _benchProducersConsumers(
-  int producers,
-  int consumers,
-  int capacity,
-  int itersPerProducer,
-  String label,
-) async {
-  final (tx0, rx0) = Mpmc.bounded<int>(capacity);
-
-  // Producers
-  final senders = <MpmcSender<int>>[tx0];
-  for (var i = 1; i < producers; i++) {
-    senders.add(senders.first.clone());
-  }
-
-  // Consumers
-  final receivers = <MpmcReceiver<int>>[rx0];
-  for (var i = 1; i < consumers; i++) {
-    receivers.add(rx0.clone());
-  }
-
-  final total = itersPerProducer * producers;
-  var received = 0;
-  var maxLatencyNs = 0;
-
-  final swAll = Stopwatch()..start();
-
-  final consumerTasks = <Future<void>>[];
-  for (final rx in receivers) {
-    consumerTasks.add(() async {
-      while (true) {
-        final t0 = Stopwatch()..start();
-        final r = await rx.recv();
-        final t = t0.elapsedMicroseconds * 1000;
-        if (r.hasValue) {
-          if (t > maxLatencyNs) maxLatencyNs = t;
-          // atomique approximative: contention minime en bench mono-isolate
-          received++;
-          if (received >= total) break;
-        } else if (r.isDisconnected) {
-          break;
-        }
-      }
-    }());
-  }
-
-  final producerTasks = <Future<void>>[];
-  for (final s in senders) {
-    producerTasks.add(() async {
-      for (var k = 0; k < itersPerProducer; k++) {
-        final res = await s.send(k);
-        if (res.isDisconnected) break;
-      }
-      s.close();
-    }());
-  }
-
-  await Future.wait([...producerTasks, ...consumerTasks]);
-  final elapsed = swAll.elapsed;
-
-  return Stats(label, total, elapsed, maxLatencyNs);
-}
-
-Future<Stats> _benchSliding(
-  DropPolicy policy,
-  int capacity,
-  int iters,
-  String label,
-) async {
-  var dropped = 0;
-
-  final (tx, rx) = Mpmc.channel<int>(
-    capacity: capacity,
-    policy: policy,
-    onDrop: (_) => dropped++,
-  );
-
-  var received = 0;
-  var maxLatencyNs = 0;
-
-  final swAll = Stopwatch()..start();
-
-  final recvLoop = () async {
-    while (received < iters) {
-      final t0 = Stopwatch()..start();
-      final r = await rx.recv();
-      final t = t0.elapsedMicroseconds * 1000;
-      if (r.hasValue) {
-        if (t > maxLatencyNs) maxLatencyNs = t;
-        received++;
-      } else if (r.isDisconnected) {
-        break;
-      }
-    }
-  }();
-
-  final sendLoop = () async {
-    for (var i = 0; i < iters; i++) {
-      final res = tx.trySend(i);
-      if (res.isFull) {
-        await tx.send(i);
-      }
-    }
-    tx.close();
-  }();
-
-  await Future.wait([recvLoop, sendLoop]);
-  final elapsed = swAll.elapsed;
-
-  return Stats(
-    label,
-    iters,
-    elapsed,
-    maxLatencyNs,
-    notes:
-        'drops: $dropped  delivered: $received (${(100.0 * received / (received + dropped)).toStringAsFixed(1)}% kept)',
-  );
-}
-
-Future<Stats> _benchLatestOnly1C(
-  int iters,
-  String label,
-) async {
-  final (tx, rx) = Mpmc.latest<int>();
-
-  var received = 0;
-  var maxLatencyNs = 0;
-
-  final swAll = Stopwatch()..start();
-
-  final recvLoop = () async {
-    while (received < iters) {
-      final t0 = Stopwatch()..start();
-      final r = await rx.recv();
-      final t = t0.elapsedMicroseconds * 1000;
-      if (r.hasValue) {
-        if (t > maxLatencyNs) maxLatencyNs = t;
-        received++;
-
-        if ((received & 0x3FF) == 0) {
-          // ignore: unused_local_variable
-          var x = 0;
-          for (int i = 0; i < 64; i++) {
-            x ^= i * i;
-          }
-        }
-      } else if (r.isDisconnected) {
-        break;
-      }
-    }
-  }();
-
-  final sendLoop = () async {
-    for (var i = 0; i < iters; i++) {
-      tx.trySend(i); // coalesce
-    }
-    tx.close();
-  }();
-
-  await Future.wait([recvLoop, sendLoop]);
-  final elapsed = swAll.elapsed;
-
-  final keepPct = (100.0 * received / iters).toStringAsFixed(1);
-
-  return Stats(
-    label,
-    iters,
-    elapsed,
-    maxLatencyNs,
-    notes: 'kept: $received / $iters  ($keepPct% observed)',
-  );
-}
-
-Future<Stats> _benchLatestOnly4C(
-  int iters,
-  String label,
-) async {
-  final (tx, rx0) = Mpmc.latest<int>();
-
-  final r1 = rx0.clone();
-  final r2 = rx0.clone();
-  final r3 = rx0.clone();
-
-  final counters = [0, 0, 0, 0];
-  var maxLatencyNs = 0;
-
-  final swAll = Stopwatch()..start();
-
-  Future<void> runConsumer(int idx, MpmcReceiver<int> rx) async {
-    while (true) {
-      final t0 = Stopwatch()..start();
-      final r = await rx.recv();
-      final t = t0.elapsedMicroseconds * 1000;
-      if (r.hasValue) {
-        counters[idx]++;
-        if (t > maxLatencyNs) maxLatencyNs = t;
-        if (counters.fold<int>(0, (a, b) => a + b) >= iters) {
-          break;
-        }
-
-        if ((counters[idx] & 0x3FF) == 0) {
-          // ignore: unused_local_variable
-          var x = 0;
-          for (int i = 0; i < 64; i++) {
-            x ^= i * i;
-          }
-        }
-      } else if (r.isDisconnected) {
-        break;
-      }
-    }
-  }
-
-  final consumers = <Future<void>>[
-    runConsumer(0, rx0),
-    runConsumer(1, r1),
-    runConsumer(2, r2),
-    runConsumer(3, r3),
-  ];
-
-  final sendLoop = () async {
-    for (var i = 0; i < iters; i++) {
-      tx.trySend(i); // coalesce
-    }
-    tx.close();
-  }();
-
-  await Future.wait([sendLoop, ...consumers]);
-  final elapsed = swAll.elapsed;
-
-  final received = counters.fold<int>(0, (a, b) => a + b);
-  final keepPct = (100.0 * received / iters).toStringAsFixed(1);
-
-  return Stats(
-    label,
-    iters,
-    elapsed,
-    maxLatencyNs,
-    notes: 'kept: $received / $iters  ($keepPct% observed)  '
-        'split: ${counters[0]}/${counters[1]}/${counters[2]}/${counters[3]}',
-  );
+  MetricsRegistry().export();
 }

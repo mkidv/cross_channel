@@ -13,6 +13,60 @@
 
 ---
 
+## [0.8.0] – 2025-09-12
+
+### Added
+
+- **XSelect**
+  - **New branch types** (modularized under `src/branches/`):
+    - `FutureBranch`, `StreamBranch`, `RecvBranch`, `TimerBranch` — each encapsulates its attach/attachSync logic.
+    - `onNotify` and `onNotifyOnce` arms to integrate `Notify` into `XSelect`.
+    - `onRecvValue` now accepts `onError` and `onDisconnected` callbacks for fine-grained handling.
+  - **TimerBranch** improvements:
+    - Support for both one-shot (`once`) and periodic (`period`) timers.
+    - Catch-up logic ensures no drift when ticks are delayed.
+  - **Synchronous fast-path**:
+    - New `attachSync` method for branches.
+    - `XSelect.run` probes branches synchronously before arming async listeners.
+- **ChannelMetrics**: global metrics system for channels.
+  - New `MetricsRecorder` interface (`ActiveMetricsRecorder` / `NoopMetricsRecorder`).
+  - Configurable via `MetricsConfig` (enable/disable, sample rate, exporters).
+  - Built-in exporters: `StdExporter`, `CsvExporter`, `NoopExporter`.
+  - Quantiles computed via P² algorithm for p50/p95/p99 latency.
+
+### Changed
+
+- **XSelect**
+  - **Refactored**:
+    - Split monolithic branch implementations into dedicated classes (`FutureBranch`, `StreamBranch`, etc.).
+    - Internal resolution now calls `attachSync` first (zero-latency when possible).
+    - Fairness rotation preserved, `.ordered()` still available to disable it.
+  - **Timeout handling**:
+    - Renamed `timeout(duration, ...)` → `onTimeout(duration, ...)` for consistency with other branch APIs.
+    - Implemented via `TimerBranch.once`.
+- **Buffers**
+  - Internal waiters now use `Completer.sync` for immediate resolution instead of scheduling via microtask
+    (applies to **unbounded**, **bounded**, **chunked**, and **latestOnly**).
+
+### Breaking
+
+- **XSelect**
+  - **Removed Ticker/Arm API**:
+    - Old `Ticker.every` and `Arm<T>` types are gone.
+    - Replace with `onTick(Duration, ...)` (periodic timers) or `onDelay(Duration, ...)` (one-shot).
+  - **Internals**:
+    - `_Branch`/`ArmBranch` types removed, replaced by `SelectBranch` interface.
+
+### Migration guide (0.8 → 0.9)
+
+```diff
+- ..timeout(Duration(seconds: 5), () => 'fallback')
++ ..onTimeout(Duration(seconds: 5), () => 'fallback')
+
+- ..onTick(Ticker.every(Duration(seconds: 1)), () => 'tick')
++ ..onTick(Duration(seconds: 1), () => 'tick')
+```
+
 ---
 
 ## [0.7.3] – 2025-09-07
@@ -30,7 +84,7 @@
 - **XSelect**
   - Builder API:
     - New `onFutureValue`, `onFutureError`, `onStreamDone` — convenience variants.
-    - New `onDelay` (+ alias `delay`) for single-shot timers.
+    - New `onDelay` for single-shot timers.
     - New `onSend(sender, value, ...)` to race a send completion.
 - **Docs & inline comments:** extensive `///` API docs and usage examples across whole package
 

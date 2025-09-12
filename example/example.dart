@@ -94,7 +94,7 @@ Future<void> main() async {
 
   while (true) {
     final shouldBreak = await XSelect.run<bool>((s) => s
-      ..onTick(Ticker.every(const Duration(milliseconds: 50)), () {
+      ..onTick(const Duration(milliseconds: 10), () {
         print('heartbeat…');
         return allDone();
       })
@@ -110,7 +110,7 @@ Future<void> main() async {
       ..onRecvValue<String>(osRx, (v) {
         print('OneShot reply: $v');
         return false;
-      }, onDisconnected: () => false)
+      })
       ..onRecvValue<String>(mpscRx, (msg) {
         print('MPSC got $msg');
         return false;
@@ -161,11 +161,13 @@ Future<void> main() async {
         }
         return allDone();
       })
-      ..timeout(const Duration(milliseconds: 60), () {
+      ..onTimeout(const Duration(milliseconds: 50), () {
         print('timeout');
         return true;
       }));
 
+    // print(
+    //     "($aliveMpsc || $aliveMpmc0 || $aliveMpmc1 || $aliveSpsc || $aliveLatest)");
     if (shouldBreak) break;
   }
 

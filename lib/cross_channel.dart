@@ -55,7 +55,7 @@ final class XChannel {
   ///
   /// **Parameters:**
   /// - [capacity]: Buffer size. `null` = unbounded, `0` = rendezvous, `>0` = bounded
-  /// - [dropPolicy]: Behavior when buffer is full (bounded channels only)
+  /// - [policy]: Behavior when buffer is full (bounded channels only)
   /// - [onDrop]: Optional callback invoked when items are dropped
   /// - [chunked]: Use optimized chunked buffer for hot paths (default: `true`)
   ///
@@ -71,7 +71,7 @@ final class XChannel {
   /// // Sliding window (drop oldest)
   /// final (tx, rx) = XChannel.mpsc<String>(
   ///   capacity: 50,
-  ///   dropPolicy: DropPolicy.oldest,
+  ///   policy: DropPolicy.oldest,
   ///   onDrop: (task) => print('Dropped: $task'),
   /// );
   ///
@@ -119,7 +119,7 @@ final class XChannel {
   ///
   /// **Parameters:**
   /// - [capacity]: Buffer size. `null` = unbounded, `0` = rendezvous, `>0` = bounded
-  /// - [dropPolicy]: Behavior when buffer is full (bounded channels only)
+  /// - [policy]: Behavior when buffer is full (bounded channels only)
   /// - [onDrop]: Optional callback invoked when items are dropped
   /// - [chunked]: Use optimized chunked buffer for hot paths (default: `true`)
   ///

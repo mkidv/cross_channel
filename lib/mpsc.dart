@@ -144,9 +144,10 @@ class Mpsc {
   ///   await writeToLog(event);
   /// }
   /// ```
-  static (MpscSender<T>, MpscReceiver<T>) unbounded<T>({bool chunked = true}) {
+  static (MpscSender<T>, MpscReceiver<T>) unbounded<T>(
+      {bool chunked = true, String? metricsId}) {
     final buf = chunked ? ChunkedBuffer<T>() : UnboundedBuffer<T>();
-    final core = _MpscCore<T>(buf);
+    final core = _MpscCore<T>(buf, metricsId: metricsId);
     final tx = core.attachSender((c) => MpscSender<T>._(c));
     final rx = core.attachReceiver((c) => MpscReceiver<T>._(c));
     return (tx, rx);
@@ -191,7 +192,8 @@ class Mpsc {
   /// // Producer waits for consumer to be ready
   /// await tx.send(message); // Blocks until consumer calls recv()
   /// ```
-  static (MpscSender<T>, MpscReceiver<T>) bounded<T>(int capacity) {
+  static (MpscSender<T>, MpscReceiver<T>) bounded<T>(int capacity,
+      {String? metricsId}) {
     if (capacity < 0) {
       throw ArgumentError.value(capacity, 'capacity', 'Must be >= 0');
     }
@@ -199,7 +201,7 @@ class Mpsc {
     final buf = (capacity == 0)
         ? RendezvousBuffer<T>()
         : BoundedBuffer<T>(capacity: capacity);
-    final core = _MpscCore<T>(buf);
+    final core = _MpscCore<T>(buf, metricsId: metricsId);
     final tx = core.attachSender((c) => MpscSender<T>._(c));
     final rx = core.attachReceiver((c) => MpscReceiver<T>._(c));
     return (tx, rx);
@@ -250,12 +252,12 @@ class Mpsc {
   ///   dataTx.trySend(reading); // May drop if consumer is slow
   /// }
   /// ```
-  static (MpscSender<T>, MpscReceiver<T>) channel<T>({
-    int? capacity,
-    DropPolicy policy = DropPolicy.block,
-    OnDrop<T>? onDrop,
-    bool chunked = true,
-  }) {
+  static (MpscSender<T>, MpscReceiver<T>) channel<T>(
+      {int? capacity,
+      DropPolicy policy = DropPolicy.block,
+      OnDrop<T>? onDrop,
+      bool chunked = true,
+      String? metricsId}) {
     final inner = capacity == null
         ? chunked
             ? ChunkedBuffer<T>()
@@ -268,7 +270,7 @@ class Mpsc {
     final ChannelBuffer<T> buf = usePolicy
         ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop)
         : inner;
-    final core = _MpscCore<T>(buf);
+    final core = _MpscCore<T>(buf, metricsId: metricsId);
     final tx = core.attachSender((c) => MpscSender<T>._(c));
     final rx = core.attachReceiver((c) => MpscReceiver<T>._(c));
     return (tx, rx);
@@ -316,8 +318,9 @@ class Mpsc {
   ///   updateProgressBar(progress.percent);
   /// }
   /// ```
-  static (MpscSender<T>, MpscReceiver<T>) latest<T>() {
-    final core = _MpscCore<T>(LatestOnlyBuffer<T>());
+  static (MpscSender<T>, MpscReceiver<T>) latest<T>({String? metricsId}) {
+    final buf = LatestOnlyBuffer<T>();
+    final core = _MpscCore<T>(buf, metricsId: metricsId);
     final tx = core.attachSender((c) => MpscSender<T>._(c));
     final rx = core.attachReceiver((c) => MpscReceiver<T>._(c));
     return (tx, rx);
@@ -325,7 +328,7 @@ class Mpsc {
 }
 
 final class _MpscCore<T> extends ChannelCore<T, _MpscCore<T>> {
-  _MpscCore(this.buf);
+  _MpscCore(this.buf, {super.metricsId});
 
   @override
   final ChannelBuffer<T> buf;

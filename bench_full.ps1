@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('spsc', 'mpsc','mpmc','oneshot','isolate','inter_isolate','all')]
+  [ValidateSet('spsc', 'mpsc','mpmc','oneshot','all')]
   [string]$Target = 'all',
   [ValidateSet('compile','run','cr')]
   [string]$Action = 'cr',
@@ -26,8 +26,6 @@ function Get-Targets {
     mpsc           = @{ src = "bin\mpsc_bench.dart";          out = "bench\mpsc_bench.exe" }
     mpmc           = @{ src = "bin\mpmc_bench.dart";          out = "bench\mpmc_bench.exe" }
     oneshot        = @{ src = "bin\oneshot_bench.dart";       out = "bench\oneshot_bench.exe" }
-    isolate        = @{ src = "bin\isolate_bench.dart";       out = "bench\isolate_bench.exe" }
-    inter_isolate  = @{ src = "bin\inter_isolate_bench.dart"; out = "bench\inter_isolate_bench.exe" }
   }
   if ($t -eq 'all') { return $map.GetEnumerator() | ForEach-Object { $_.Key, $_.Value } }
   if (-not $map.ContainsKey($t)) { throw "Unknown target '$t'." }
@@ -88,7 +86,7 @@ function Ensure-CsvHeader {
   }
 
   if ($needHeader) {
-    'suite,case,mops,ns_per_op,max_latency_us,notes' | Out-File -FilePath $path -Encoding utf8
+    'ts,type,id,sent,recv,dropped,closed,trySendOk,trySendFail,tryRecvOk,tryRecvEmpty,send_p50_ns,send_p95_ns,send_p99_ns,recv_p50_ns,recv_p95_ns,recv_p99_ns,mops,ns_per_op,drop_rate,try_send_failure_rate,try_recv_empty_rate,channels_count' | Out-File -FilePath $path -Encoding utf8
   }
 }
 
@@ -108,7 +106,7 @@ function Run-Target {
   $out = $meta.out
   
   Write-Host ""
-  Write-Host ("=== Running {0} ({1} iterations) ===" -f $name, $Count) -ForegroundColor Cyan
+  Write-Host ("Running {0} ({1} iterations)" -f $name, $Count) -ForegroundColor Green
 
   for ($i=1; $i -le $Repeat; $i++) {
     $sw = [System.Diagnostics.Stopwatch]::StartNew()

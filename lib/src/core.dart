@@ -2,23 +2,34 @@ import 'dart:async';
 
 import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/lifecycle.dart';
+import 'package:cross_channel/src/metrics/recorders.dart';
 import 'package:cross_channel/src/ops.dart';
 import 'package:cross_channel/src/result.dart';
+
+typedef Channel<T> = (Sender<T> tx, Receiver<T> rx);
 
 /// Core channel traits: lifecycle + send/recv ops binding.
 ///
 /// `ChannelCore<T, Self>` ties a buffer implementation to lifecycle
 /// (attach/drop senders/receivers, disconnection semantics) and exposes the
 /// high-level send/recv operations via `ChannelOps<T>`.
-///
 abstract class ChannelCore<T, Self extends Object>
     with ChannelLifecycle<T, Self>, ChannelOps<T> {
+  ChannelCore({String? metricsId, MetricsRecorder? metrics})
+      : _mx = metrics ?? buildMetricsRecorder(metricsId);
+
   @override
   ChannelBuffer<T> get buf;
   @override
   bool get sendDisconnected;
   @override
   bool get recvDisconnected;
+
+  final MetricsRecorder _mx;
+
+  @override
+  @pragma('vm:prefer-inline')
+  MetricsRecorder get mx => _mx;
 }
 
 abstract class Closeable {

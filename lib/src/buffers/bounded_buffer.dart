@@ -66,7 +66,7 @@ final class BoundedBuffer<T> implements ChannelBuffer<T> {
       _permits++;
       return;
     }
-    final c = Completer<void>();
+    final c = Completer<void>.sync();
     _pushWaiters.addLast(c);
     await c.future;
   }
@@ -79,7 +79,7 @@ final class BoundedBuffer<T> implements ChannelBuffer<T> {
   @pragma('vm:prefer-inline')
   @override
   Completer<T> addPopWaiter() {
-    final c = Completer<T>();
+    final c = Completer<T>.sync();
 
     final v = tryPop();
     if (v != null) {

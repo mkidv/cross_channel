@@ -44,7 +44,7 @@ final class LatestOnlyBuffer<T> implements ChannelBuffer<T> {
   @pragma('vm:prefer-inline')
   @override
   Completer<T> addPopWaiter() {
-    final c = Completer<T>();
+    final c = Completer<T>.sync();
 
     final v = tryPop();
     if (v != null) {

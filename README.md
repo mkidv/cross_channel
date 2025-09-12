@@ -243,16 +243,56 @@ await XSelect.run<void>((s) => s
 
 `XSelect` lets you race multiple asynchronous branches and cancel the losers.
 
-Cheat-sheet :
+Cheat-sheet
 
-- Channels: onRecv, onRecvValue, onRecvError
-- Futures: onFuture, onFutureValue, onFutureError
-- Streams: onStream, onStreamDone
-- Timers: onTick(Ticker), onDelay / delay
-- Sending: onSend(sender, value, ...)
-- Arms (sync fast-path): onArm(Arm.immediate|pending), XSelect.syncRun(...)
-- Guards: if\_: () => bool to enable/disable a branch
-- Fairness vs order: fairness rotation by default; use .ordered() to preserve declaration order
+- **Channels (Receiver)**
+
+  - onRecv(rx, (RecvResult<T>) -> R, {tag}) (sync fast-path via tryRecv)
+
+  - onRecvValue(rx, (T) -> R, {onDisconnected, tag})
+
+  - onRecvError(rx, (Object, StackTrace?) -> R
+
+- **Notify**
+
+  - onNotify(Notify n, R Function() body, {Object? tag})
+  - onNotifyOnce(Notify n, R Function() body, {Object? tag})
+
+- **Futures**
+
+  - onFuture(future, (T) -> R, {tag})
+
+  - onFutureValue(future, (T) -> R, {tag})
+
+  - onFutureError(future, (Object, StackTrace?) -> R, {tag})
+
+- **Streams**
+
+  - onStream(stream, (T) -> R, {tag})
+
+  - onStreamDone(stream, () -> R, {tag})
+
+- **Timers**
+
+  - onDelay(Duration, () -> R, {tag}) (one-shot)
+
+  - onTick(Duration, () -> R, {tag}) (every)
+
+- **Sending**
+
+  - onSend(sender, value, {tag}) (races a send; wins when the send completes)
+
+- **Sync fast-path**
+
+  - XSelect.syncRun(builder) → only immediate, non-blocking arms (e.g., tryRecv, already-due timers).
+
+- **Guards**
+
+  - if\_(() => bool) to enable/disable a branch without rebuilding the selection.
+
+- **Fairness vs order**
+
+  - Fairness by rotation is default; call .ordered() to preserve declaration order
 
 ```dart
 import 'package:cross_channel/cross_channel.dart';
@@ -285,7 +325,7 @@ Future<void> main() async {
       tag: 'R'?
     )
     ..onTick(
-     Ticker.every(const Duration(milliseconds: 50)),
+     const Duration(milliseconds: 50),
       () => 'timer',
       tag: 'T',
     )
@@ -405,61 +445,47 @@ cancel(); // attempts to abort the wait if still pending
 
 ### MPSC
 
-| case                              | Mops/s (median) | ns/op (median) | max us (median) |
-| --------------------------------- | --------------: | -------------: | --------------: |
-| ping-pong cap=1 (1P/1C)           |            1.87 |          535.7 |           177.0 |
-| pipeline cap=1024 (1P/1C)         |            1.83 |          547.1 |           264.0 |
-| pipeline unbounded (1P/1C)        |            1.83 |          546.5 |           269.0 |
-| multi-producers x4 cap=1024       |            1.06 |          946.5 |         13907.0 |
-| pipeline rendezvous cap=0 (1P/1C) |            1.68 |          593.8 |           150.0 |
-| sliding=oldest cap=1024 (1P/1C)   |           24.19 |           41.3 |         41133.0 |
-| sliding=newest cap=1024 (1P/1C)   |           55.25 |           18.1 |         17895.0 |
-| latestOnly (coalesce) (1P/1C)     |          135.89 |            7.4 |          7353.0 |
+| case                                 | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
+| ------------------------------------ | ------------: | -----------: | ------------: |
+| ping-pong cap=1 (1P/1C)              |          1.87 |        535.7 |           7.5 |
+| pipeline cap=1024 (1P/1C)            |          1.83 |        547.1 |          13.1 |
+| pipeline unbounded (1P/1C)           |          1.77 |        563.0 |          12.3 |
+| pipeline unbounded (chunked) (1P/1C) |          1.83 |        546.5 |          10.1 |
+| multi-producers cap=1024 (4P/1C)     |          1.72 |        565.6 |          10.6 |
+| pipeline rendezvous cap=0 (1P/1C)    |          1.68 |        593.8 |          11.4 |
+| sliding=oldest cap=1024 (1P/1C)      |          1.76 |        568.3 |          15.9 |
+| sliding=newest cap=1024 (1P/1C)      |          1.74 |        574.6 |          11.6 |
+| latestOnly (coalesce) (1P/1C)        |          1.60 |        626.3 |          14.9 |
 
 ### MPMC
 
-| case                                      | Mops/s (median) | ns/op (median) | max us (median) |
-| ----------------------------------------- | --------------: | -------------: | --------------: |
-| ping-pong cap=1 (1P/1C)                   |            1.87 |          536.1 |           129.0 |
-| pipeline cap=1024 (1P/1C)                 |            1.90 |          525.0 |           121.0 |
-| pipeline unbounded (1P/1C)                |            1.87 |          534.1 |           233.0 |
-| producers x4 cap=1024 (1C)                |            1.07 |          937.8 |         12581.0 |
-| producers x4 / consumers x4 cap=1024      |            1.78 |          561.3 |            95.0 |
-| pipeline rendezvous cap=0 (1P/1C)         |            1.72 |          580.1 |           126.0 |
-| sliding=oldest cap=1024 (1P/1C)           |           24.24 |           41.3 |         41048.0 |
-| sliding=newest cap=1024 (1P/1C)           |           54.14 |           18.5 |         18270.0 |
-| latestOnly (coalesce) (1P/1C)             |          139.90 |            7.1 |          7143.0 |
-| latestOnly (coalesce) (1P/4C competitive) |          125.00 |            8.0 |          7994.0 |
+| case                                      | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
+| ----------------------------------------- | ------------: | -----------: | ------------: |
+| ping-pong cap=1 (1P/1C)                   |          1.87 |        536.1 |           7.5 |
+| pipeline cap=1024 (1P/1C)                 |          1.90 |        525.0 |          14.2 |
+| pipeline unbounded (1P/1C)                |          1.87 |        534.1 |          11.4 |
+| multi-producers cap=1024 (4P/1C)          |          1.72 |        580.5 |          18.0 |
+| multi-producers cap=1024 (4P/4C)          |          1.72 |        580.8 |          16.7 |
+| pipeline rendezvous cap=0 (1P/1C)         |          1.62 |        619.0 |          13.0 |
+| sliding=oldest cap=1024 (1P/1C)           |          1.76 |        569.5 |          14.9 |
+| sliding=newest cap=1024 (1P/1C)           |          1.74 |        573.5 |          10.9 |
+| latestOnly (coalesce) (1P/1C)             |          1.63 |        614.3 |          15.8 |
+| latestOnly (coalesce/competitive) (1P/4C) |          1.66 |        604.1 |          22.8 |
 
 ### SPSC
 
-| case                             | Mops/s (median) | ns/op (median) | max us (median) |
-| -------------------------------- | --------------: | -------------: | --------------: |
-| spsc ping-pong pow2=1024 (1P/1C) |            1.76 |          569.8 |           108.0 |
-| spsc pipeline pow2=1024 (1P/1C)  |            1.78 |          562.8 |            99.0 |
-| spsc pipeline pow2=4096 (1P/1C)  |            1.80 |          555.3 |            92.0 |
+| case                    | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
+| ----------------------- | ------------: | -----------: | ------------: |
+| spsc ping-pong cap=1024 |          1.76 |        569.8 |           5.2 |
+| spsc pipeline cap=1024  |          1.78 |        562.8 |           7.1 |
+| spsc pipeline cap=4096  |          1.80 |        555.3 |          15.7 |
 
 ### ONESHOT
 
-| case                          | Mops/s (median) | ns/op (median) | max us (median) |
-| ----------------------------- | --------------: | -------------: | --------------: |
-| oneshot create+send+recv      |            2.62 |          381.7 |           146.0 |
-| oneshot reuse sender (new rx) |            2.56 |          390.5 |            44.0 |
-
-### INTER-ISOLATE
-
-| case                                  | Mops/s (median) | ns/op (median) | max us (median) |
-| ------------------------------------- | --------------: | -------------: | --------------: |
-| SendPort roundtrip Uint8List (16.0KB) |            0.05 |        20665.0 |           199.0 |
-| raw SendPort ping-pong (int)          |            0.20 |         5078.9 |          1334.0 |
-| raw event drain (int)                 |            2.42 |          413.9 |             0.0 |
-
-### ISOLATE
-
-| case                 | Mops/s (median) | ns/op (median) | max us (median) |
-| -------------------- | --------------: | -------------: | --------------: |
-| isolate event drain  |            0.60 |         1675.8 |             0.0 |
-| isolate request echo |            0.04 |        24088.7 |          1498.0 |
+| case                 | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
+| -------------------- | ------------: | -----------: | ------------: |
+| oneshot send+receive |          2.75 |        363.6 |           1.7 |
+| oneshot pipeline     |          2.80 |        356.9 |           4.3 |
 
 ### How to bench
 
@@ -513,23 +539,95 @@ Parameters (full mode):
 
 Stability tips: pin CPU with -Affinity, raise -Priority High, do a warm-up repeat, and keep the machine idle.
 
-#### CSV format
+#### Benchmark CSV Format
 
-Each benchmark prints lines like:
+> **Note:** Benchmarks use the same metrics CSV format shown in the [Metrics section](#-metrics-advanced).  
+> When you run benchmarks with `--csv`, they output detailed metrics for each test case.
 
-```csv
-suite,case,mops,ns_per_op,max_latency_us,notes
-MPMC,"pipeline cap=1024 (1P/1C)",1.91,524.5,51.0,
-```
-
-- suite: group (e.g., MPSC, MPMC, SPSC, ONESHOT, ISOLATE, INTER-ISOLATE)
-- case: scenario description (e.g., pipeline cap=1024 (1P/1C))
-- mops: million ops/sec (higher = better)
-- ns_per_op: nanoseconds per op (lower = better)
-- max_latency_us: max observed recv latency in microseconds (lower = better)
-- notes: free text (often empty)
+The benchmark scripts automatically enable metrics collection and use `StdExporter` or `CsvExporter` to output comprehensive performance data including operation counts, latency percentiles, and throughput measurements.
 
 You can aggregate across repeats (median/mean/p95) in your own tooling.
+
+## 📊 Metrics (Advanced)
+
+Built-in metrics system for production monitoring and performance analysis.
+
+```dart
+import 'package:cross_channel/metrics.dart';
+
+// Enable metrics globally
+MetricsConfig.enabled = true;
+MetricsConfig.sampleLatency = true;
+MetricsConfig.sampleRate = 0.1; // 10% sampling
+
+// Configure exporter
+MetricsConfig.exporter = StdExporter(
+  useColor: true,
+  compact: false,
+);
+
+// OR export to CSV file
+final csvFile = File('metrics.csv');
+MetricsConfig.exporter = CsvExporter(sink: csvFile.openWrite());
+
+// Channels automatically collect metrics
+final (tx, rx) = XChannel.mpsc<String>(capacity: 1000);
+```
+
+**Available exporters:**
+- `NoopExporter` - Default (discards metrics)
+- `StdExporter` - Formatted console output with colors
+- `CsvExporter` - Export to CSV format (stdout or file)
+- Custom exporters by extending `MetricsExporter`
+
+**Metrics collected:**
+- Operation counts: `sent`, `recv`, `dropped`, `closed`
+- Latency percentiles: P50, P95, P99 (via P² algorithm)
+- Performance: ops/second, ns/operation, drop rates
+- Per-channel and global aggregation
+
+**Performance impact:** unmeasured.
+
+### CSV Metrics Format
+
+The `CsvExporter` produces runtime metrics. This is the same format used by the benchmark scripts:
+
+```csv
+ts,type,id,sent,recv,dropped,closed,trySendOk,trySendFail,tryRecvOk,tryRecvEmpty,send_p50_ns,send_p95_ns,send_p99_ns,recv_p50_ns,recv_p95_ns,recv_p99_ns,mops,ns_per_op,drop_rate,try_send_failure_rate,try_recv_empty_rate,channels_count
+2025-09-12T20:26:00.000Z,global,,1000,950,50,0,800,200,900,50,,,,,,,0.95,1052,0.05,0.2,0.05,3
+2025-09-12T20:26:00.000Z,channel,my-worker-queue,500,480,20,0,400,100,450,30,1200.5,2100.8,5000.2,950.1,1800.3,4200.1,0.48,2083,0.04,0.2,0.06,
+```
+
+**Field Groups:**
+
+**Metadata:**
+- `ts` - Timestamp (ISO8601)
+- `type` - 'global' or 'channel'
+- `id` - Channel identifier (empty for global)
+
+**Core Operations:**
+- `sent`, `recv` - Total blocking operation counts
+- `dropped`, `closed` - Loss and lifecycle events
+
+**Non-blocking Operations:**  
+- `trySendOk`, `trySendFail` - Non-blocking send results
+- `tryRecvOk`, `tryRecvEmpty` - Non-blocking receive results
+
+**Latency Percentiles (nanoseconds):**
+- `send_p50_ns`, `send_p95_ns`, `send_p99_ns` - Send operation latencies
+- `recv_p50_ns`, `recv_p95_ns`, `recv_p99_ns` - Receive operation latencies
+
+**Performance Metrics:**
+- `mops` - Million operations per second
+- `ns_per_op` - Nanoseconds per operation
+
+**Quality Metrics:**
+- `drop_rate` - Percentage of dropped messages (0.0-1.0)
+- `try_send_failure_rate` - Non-blocking send failure rate (0.0-1.0)
+- `try_recv_empty_rate` - Non-blocking receive empty rate (0.0-1.0)
+
+**System:**
+- `channels_count` - Total active channels (global snapshots only)
 
 ## 🧪 Testing
 

@@ -1,4 +1,5 @@
 import 'package:cross_channel/src/buffers.dart';
+import 'package:cross_channel/src/metrics/recorders.dart';
 import 'package:cross_channel/src/result.dart';
 
 /// Channel lifecycle: tracks active senders/receivers and handles shutdown.
@@ -7,9 +8,10 @@ import 'package:cross_channel/src/result.dart';
 /// and the buffer is cleared; senders are awakened.
 mixin ChannelLifecycle<T, Self extends Object> {
   ChannelBuffer<T> get buf;
-
   bool get allowMultiSenders;
   bool get allowMultiReceivers;
+
+  MetricsRecorder get mx;
 
   int _activeSenders = 0;
   int _activeReceivers = 0;
@@ -54,7 +56,11 @@ mixin ChannelLifecycle<T, Self extends Object> {
     if (_activeSenders == 0) {
       _closedSenders = true;
       buf.wakeAllPushWaiters();
-      if (buf.isEmpty) buf.failAllPopWaiters(const RecvErrorDisconnected());
+      mx.markWakeAll();
+      if (buf.isEmpty) {
+        buf.failAllPopWaiters(const RecvErrorDisconnected());
+        mx.markClosed();
+      }
     }
   }
 
@@ -65,8 +71,10 @@ mixin ChannelLifecycle<T, Self extends Object> {
     if (_activeReceivers == 0) {
       _closedReceivers = true;
       buf.wakeAllPushWaiters();
+      mx.markWakeAll();
       buf.failAllPopWaiters(const RecvErrorDisconnected());
       buf.clear();
+      mx.markClosed();
     }
   }
 }

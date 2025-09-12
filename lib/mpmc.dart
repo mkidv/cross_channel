@@ -175,9 +175,10 @@ final class Mpmc {
   ///   await writeToLog(event);
   /// }
   /// ```
-  static (MpmcSender<T>, MpmcReceiver<T>) unbounded<T>({bool chunked = true}) {
+  static (MpmcSender<T>, MpmcReceiver<T>) unbounded<T>(
+      {bool chunked = true, String? metricsId}) {
     final buf = chunked ? ChunkedBuffer<T>() : UnboundedBuffer<T>();
-    final core = _MpmcCore<T>(buf);
+    final core = _MpmcCore<T>(buf, metricsId: metricsId);
     final tx = core.attachSender((c) => MpmcSender<T>._(c));
     final rx = core.attachReceiver((c) => MpmcReceiver._(c));
     return (tx, rx);
@@ -222,7 +223,8 @@ final class Mpmc {
   /// // Producer waits for consumer to be ready
   /// await tx.send(message); // Blocks until consumer calls recv()
   /// ```
-  static (MpmcSender<T>, MpmcReceiver<T>) bounded<T>(int capacity) {
+  static (MpmcSender<T>, MpmcReceiver<T>) bounded<T>(int capacity,
+      {String? metricsId}) {
     if (capacity < 0) {
       throw ArgumentError.value(capacity, 'capacity', 'Must be >= 0');
     }
@@ -230,7 +232,7 @@ final class Mpmc {
     final buf = (capacity == 0)
         ? RendezvousBuffer<T>()
         : BoundedBuffer<T>(capacity: capacity);
-    final core = _MpmcCore<T>(buf);
+    final core = _MpmcCore<T>(buf, metricsId: metricsId);
     final tx = core.attachSender((c) => MpmcSender<T>._(c));
     final rx = core.attachReceiver((c) => MpmcReceiver._(c));
     return (tx, rx);
@@ -286,6 +288,7 @@ final class Mpmc {
     DropPolicy policy = DropPolicy.block,
     OnDrop<T>? onDrop,
     bool chunked = true,
+    String? metricsId,
   }) {
     final inner = capacity == null
         ? chunked
@@ -299,7 +302,7 @@ final class Mpmc {
     final ChannelBuffer<T> buf = usePolicy
         ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop)
         : inner;
-    final core = _MpmcCore<T>(buf);
+    final core = _MpmcCore<T>(buf, metricsId: metricsId);
     final tx = core.attachSender((c) => MpmcSender<T>._(c));
     final rx = core.attachReceiver((c) => MpmcReceiver<T>._(c));
     return (tx, rx);
@@ -357,8 +360,9 @@ final class Mpmc {
   ///   });
   /// }
   /// ```
-  static (MpmcSender<T>, MpmcReceiver<T>) latest<T>() {
-    final core = _MpmcCore<T>(LatestOnlyBuffer<T>());
+  static (MpmcSender<T>, MpmcReceiver<T>) latest<T>({String? metricsId}) {
+    final buf = LatestOnlyBuffer<T>();
+    final core = _MpmcCore<T>(buf, metricsId: metricsId);
     final tx = core.attachSender((c) => MpmcSender<T>._(c));
     final rx = core.attachReceiver((c) => MpmcReceiver<T>._(c));
     return (tx, rx);
@@ -366,7 +370,7 @@ final class Mpmc {
 }
 
 final class _MpmcCore<T> extends ChannelCore<T, _MpmcCore<T>> {
-  _MpmcCore(this.buf);
+  _MpmcCore(this.buf, {super.metricsId});
 
   @override
   final ChannelBuffer<T> buf;

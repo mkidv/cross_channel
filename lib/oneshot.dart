@@ -179,10 +179,9 @@ class OneShot {
   /// final config1 = (await configRx.recv()).valueOrNull;
   /// final config2 = (await configRx.recv()).valueOrNull; // Same config
   /// ```
-  static (OneShotSender<T>, OneShotReceiver<T>) channel<T>({
-    bool consumeOnce = false,
-  }) {
-    final core = _OneShotCore<T>(consumeOnce: consumeOnce);
+  static (OneShotSender<T>, OneShotReceiver<T>) channel<T>(
+      {bool consumeOnce = false, String? metricsId}) {
+    final core = _OneShotCore<T>(consumeOnce: consumeOnce, metricsId: metricsId);
     final tx = core.attachSender((c) => OneShotSender<T>._(c));
     final rx = core.attachReceiver((c) => OneShotReceiver<T>._(c));
     return (tx, rx);
@@ -190,7 +189,7 @@ class OneShot {
 }
 
 final class _OneShotCore<T> extends ChannelCore<T, _OneShotCore<T>> {
-  _OneShotCore({required bool consumeOnce})
+  _OneShotCore({required bool consumeOnce, super.metricsId})
       : buf = PromiseBuffer<T>(consumeOnce: consumeOnce);
 
   @override

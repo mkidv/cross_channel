@@ -1,190 +1,8 @@
 import 'dart:async';
 
 import 'package:cross_channel/cross_channel.dart';
+import 'package:cross_channel/src/branches.dart';
 import 'package:cross_channel/src/core.dart';
-
-typedef Canceller = void Function();
-typedef RegisterCanceller = void Function(Canceller);
-typedef Resolve<R> = FutureOr<void> Function(
-  int index,
-  Object? tag,
-  FutureOr<R> result,
-);
-
-/// Contract for a selectable branch: attach to a source and call `resolve` when it fires.
-/// Returns `true` if it resolved *synchronously* during attach (only possible for Arm.immediate).
-abstract class _Branch<R> {
-  bool attach({
-    required Resolve<R> resolve,
-    required RegisterCanceller registerCanceller,
-    required int index,
-  });
-}
-
-/// Small ADT representing either an immediate value or a pending future with a canceller.
-/// Use this to model sources that may have a fast-path (e.g. tryPop) for sync selection.
-sealed class Arm<T> {
-  const Arm();
-  factory Arm.immediate(T value) = _ArmImmediate<T>;
-  factory Arm.pending(Future<T> future, Canceller cancel) = _ArmPending<T>;
-}
-
-class _ArmImmediate<T> implements Arm<T> {
-  const _ArmImmediate(this.value);
-  final T value;
-}
-
-class _ArmPending<T> implements Arm<T> {
-  const _ArmPending(this.future, this.cancel);
-  final Future<T> future;
-  final Canceller cancel;
-}
-
-class _FutureBranch<T, R> implements _Branch<R> {
-  const _FutureBranch(this.future, this.body, {this.tag});
-
-  final Future<T> future;
-  final FutureOr<R> Function(T) body;
-  final Object? tag;
-
-  @override
-  bool attach({
-    required Resolve<R> resolve,
-    required RegisterCanceller registerCanceller,
-    required int index,
-  }) {
-    var canceled = false;
-    void cancel() => canceled = true;
-    registerCanceller(cancel);
-
-    future.then((u) {
-      if (canceled) return;
-      try {
-        resolve(index, tag, body(u));
-      } catch (e, st) {
-        Zone.current.handleUncaughtError(e, st);
-      }
-    }, onError: (Object e, StackTrace? st) {
-      if (canceled) return;
-      resolve(index, tag, Future<R>.error(e, st));
-    });
-    return false;
-  }
-}
-
-class _StreamBranch<T, R> implements _Branch<R> {
-  const _StreamBranch(this.stream, this.body, {this.tag});
-
-  final Stream<T> stream;
-  final FutureOr<R> Function(T) body;
-  final Object? tag;
-
-  @override
-  bool attach({
-    required Resolve<R> resolve,
-    required RegisterCanceller registerCanceller,
-    required int index,
-  }) {
-    var canceled = false;
-    StreamSubscription<T>? sub;
-
-    void cancel() {
-      canceled = true;
-      sub?.cancel();
-      sub = null;
-    }
-
-    registerCanceller(cancel);
-    sub = stream.listen((u) {
-      if (canceled) return;
-      resolve(index, tag, body(u));
-    }, onError: (Object e, StackTrace? st) {
-      if (canceled) return;
-      resolve(index, tag, Future<R>.error(e, st));
-    }, onDone: () {
-      cancel();
-    }, cancelOnError: false);
-
-    return false;
-  }
-}
-
-class _TimerBranch<R> implements _Branch<R> {
-  const _TimerBranch(this.delay, this.body, {this.tag});
-
-  final Duration delay;
-  final FutureOr<R> Function() body;
-  final Object? tag;
-
-  @override
-  bool attach({
-    required Resolve<R> resolve,
-    required RegisterCanceller registerCanceller,
-    required int index,
-  }) {
-    final t = Timer(delay, () => resolve(index, tag, body()));
-    registerCanceller(() {
-      if (t.isActive) t.cancel();
-    });
-    return false;
-  }
-}
-
-class ArmBranch<T, R> implements _Branch<R> {
-  const ArmBranch(this.armFactory, this.body, {this.tag});
-
-  final Arm<T> Function() armFactory;
-  final FutureOr<R> Function(T) body;
-  final Object? tag;
-
-  @override
-  bool attach({
-    required Resolve<R> resolve,
-    required RegisterCanceller registerCanceller,
-    required int index,
-  }) {
-    final a = armFactory();
-    switch (a) {
-      case _ArmImmediate<T>():
-        resolve(index, tag, body(a.value));
-        return true;
-      case _ArmPending<T>():
-        registerCanceller(a.cancel);
-        a.future.then((u) {
-          resolve(index, tag, body(u));
-        }, onError: (Object e, StackTrace? st) {
-          resolve(index, tag, Future<R>.error(e, st));
-        });
-        return false;
-    }
-  }
-}
-
-class _ReceiverBranch<T, R> implements _Branch<R> {
-  const _ReceiverBranch(this.rx, this.body, {this.tag});
-
-  final Receiver<T> rx;
-  final FutureOr<R> Function(RecvResult<T>) body;
-  final Object? tag;
-
-  @override
-  bool attach({
-    required Resolve<R> resolve,
-    required RegisterCanceller registerCanceller,
-    required int index,
-  }) {
-    final (fut, cancel) = rx.recvCancelable();
-    registerCanceller(cancel);
-    fut.then((res) {
-      if (res is RecvErrorCanceled) return;
-      resolve(index, tag, body(res));
-    }, onError: (Object e, StackTrace? st) {
-      if (e is RecvErrorCanceled) return;
-      resolve(index, tag, Future<R>.error(e, st));
-    });
-    return false;
-  }
-}
 
 /// Async multiplexing - race multiple operations with automatic cancellation.
 ///
@@ -205,7 +23,7 @@ class _ReceiverBranch<T, R> implements _Branch<R> {
 /// final result = await XSelect.run<String>((s) => s
 ///   ..onRecvValue(dataChannel, (data) => 'got_data: $data')
 ///   ..onTick(Ticker.every(Duration(seconds: 1)), () => 'heartbeat')
-///   ..timeout(Duration(seconds: 30), () => 'timeout_reached')
+///   ..onTimeout(Duration(seconds: 30), () => 'timeout_reached')
 /// );
 ///
 /// switch (result) {
@@ -236,7 +54,7 @@ class _ReceiverBranch<T, R> implements _Branch<R> {
 ///   return await XSelect.run<Config>((s) => s
 ///     ..onFuture(loadFromServer(), (c) => c)
 ///     ..onFuture(loadFromCache(), (c) => c)
-///     ..timeout(Duration(seconds: 5), () => Config.defaultConfig())
+///     ..onTimeout(Duration(seconds: 5), () => Config.defaultConfig())
 ///   );
 /// }
 /// ```
@@ -249,8 +67,7 @@ class XSelect {
   ///
   /// **Parameters:**
   /// - [build]: Builder function to configure the selection branches
-  /// - [timeout]: Optional global timeout for the entire selection
-  /// - [onTimeout]: Function to call if the global timeout is reached
+  /// - [onTimeout]: Optional global timeout for the entire selection
   /// - [ordered]: If `true`, evaluates branches in order; if `false`, uses fairness rotation
   ///
   /// **Example - Event-driven architecture:**
@@ -266,7 +83,7 @@ class XSelect {
   ///         ..onRecvValue(_commands, (cmd) => _handleCommand(cmd))
   ///         ..onTick(_health, () => 'health_check')
   ///         ..onStream(websocketStream, (msg) => _handleWebSocket(msg))
-  ///         ..timeout(Duration(minutes: 5), () => 'idle_timeout')
+  ///         ..onTimeout(Duration(minutes: 5), () => 'idle_timeout')
   ///       );
   ///
   ///       if (action == 'idle_timeout') break;
@@ -283,15 +100,10 @@ class XSelect {
   /// - [XChannel] for channel-based communication
   static Future<R> run<R>(
     void Function(SelectBuilder<R>) build, {
-    Duration? timeout,
-    FutureOr<R> Function()? onTimeout,
     bool ordered = false,
   }) async {
     final b = SelectBuilder<R>();
     build(b);
-    if (timeout != null && onTimeout != null) {
-      b.timeout(timeout, onTimeout);
-    }
     if (ordered) b.ordered();
     return b.run();
   }
@@ -311,15 +123,13 @@ class XSelect {
   /// Compose several builders into a single race. Useful to keep related branches grouped.
   static Future<R> race<R>(
     Iterable<void Function(SelectBuilder<R> b)> competitors, {
-    Duration? timeout,
-    FutureOr<R> Function()? onTimeout,
     bool ordered = false,
   }) =>
       run<R>((b) {
         for (final c in competitors) {
           c(b);
         }
-      }, timeout: timeout, onTimeout: onTimeout, ordered: ordered);
+      }, ordered: ordered);
 
   /// Synchronous variant of [race]. Returns immediately if any competitor exposes
   /// an `Arm.immediate`; otherwise returns `null` without subscribing.
@@ -358,7 +168,7 @@ class XSelect {
 /// **Timer Operations:**
 /// - [onTick] - Wait for timer tick
 /// - [onDelay] - Add fixed delay branch
-/// - [timeout] - Add timeout to the entire selection
+/// - [onTimeout] - Add timeout to the entire selection
 ///
 /// **Example - Multi-source data processing:**
 /// ```dart
@@ -373,22 +183,20 @@ class XSelect {
 ///     ..onStream(dataStream, (data) => ProcessorAction.processData(data))
 ///
 ///     // Periodic maintenance
-///     ..onTick(maintenanceTicker, () => ProcessorAction.maintenance())
+///     ..onTick(Duration(days: 5), () => ProcessorAction.maintenance())
 ///
 ///     // API health checks
 ///     ..onFuture(healthCheck(), (status) => ProcessorAction.healthUpdate(status))
 ///
 ///     // Graceful shutdown on idle
-///     ..timeout(Duration(minutes: 10), () => ProcessorAction.shutdown())
+///     ..onTimeout(Duration(minutes: 10), () => ProcessorAction.shutdown())
 ///   );
 ///
 ///   await processor.handleAction(action);
 /// }
 /// ```
 class SelectBuilder<R> {
-  final List<(_Branch<R> b, bool Function()? guard)> _branches = [];
-  Duration? _timeout;
-  FutureOr<R> Function()? _onTimeout;
+  final List<(SelectBranch<R> b, bool Function()? guard)> _branches = [];
   bool _ordered = false;
 
   /// Race a Future - handles both success and error cases.
@@ -407,12 +215,15 @@ class SelectBuilder<R> {
   /// await XSelect.run<String>((s) => s
   ///   ..onFuture(apiCall(), (result) => 'API returned: $result')
   ///   ..onFuture(fallbackCall(), (result) => 'Fallback: $result')
-  ///   ..timeout(Duration(seconds: 5), () => 'timeout')
+  ///   ..onTimeout(Duration(seconds: 5), () => 'timeout')
   /// );
   /// ```
+  /// **See also:**
+  /// - [onFutureValue] - Only handle value
+  /// - [onFutureError] - Only handle error
   SelectBuilder<R> onFuture<T>(Future<T> fut, FutureOr<R> Function(T) body,
       {Object? tag, bool Function()? if_}) {
-    _branches.add((_FutureBranch<T, R>(fut, body, tag: tag), if_));
+    _branches.add((FutureBranch<T, R>(fut, body, tag: tag), if_));
     return this;
   }
 
@@ -429,9 +240,12 @@ class SelectBuilder<R> {
   ///   ..delay(Duration(seconds: 3), () => 'No data available')
   /// );
   /// ```
+  /// **See also:**
+  /// - [onFuture] - Parent
+  /// - [onFutureError] - Only handle error
   SelectBuilder<R> onFutureValue<T>(Future<T> fut, FutureOr<R> Function(T) body,
       {Object? tag, bool Function()? if_}) {
-    return onFuture<T>(fut, body, tag: tag, if_: if_);
+    return onFuture<T>(fut.then((value) => value), body, tag: tag, if_: if_);
   }
 
   /// Race a Future, but only handle errors.
@@ -444,9 +258,12 @@ class SelectBuilder<R> {
   /// await XSelect.run<String>((s) => s
   ///   ..onStream(dataStream, (data) => 'Processing: $data')
   ///   ..onFutureError(backgroundTask(), (error) => 'Task failed: $error')
-  ///   ..timeout(Duration(seconds: 30), () => 'timeout')
+  ///   ..onTimeout(Duration(seconds: 30), () => 'timeout')
   /// );
   /// ```
+  /// **See also:**
+  /// - [onFuture] - Parent
+  /// - [onFutureValue] - Only handle value
   SelectBuilder<R> onFutureError<T>(
       Future<T> fut, FutureOr<R> Function(Object error) body,
       {Object? tag, bool Function()? if_}) {
@@ -472,12 +289,14 @@ class SelectBuilder<R> {
   ///   ..onStream(userClicks, (click) => 'User clicked: $click')
   ///   ..onStream(keyboardEvents, (key) => 'Key pressed: $key')
   ///   ..onStream(networkEvents, (event) => 'Network: $event')
-  ///   ..timeout(Duration(seconds: 30), () => 'No user activity')
+  ///   ..onTimeout(Duration(seconds: 30), () => 'No user activity')
   /// );
   /// ```
+  /// **See also:**
+  /// - [onStreamDone] - Only handle completion
   SelectBuilder<R> onStream<T>(Stream<T> stream, FutureOr<R> Function(T) body,
       {Object? tag, bool Function()? if_}) {
-    _branches.add((_StreamBranch<T, R>(stream, body, tag: tag), if_));
+    _branches.add((StreamBranch<T, R>(stream, body, tag: tag), if_));
     return this;
   }
 
@@ -491,9 +310,11 @@ class SelectBuilder<R> {
   /// await XSelect.run<String>((s) => s
   ///   ..onStream(dataStream, (data) => 'Data: $data')
   ///   ..onStreamDone(dataStream, () => 'Stream completed')
-  ///   ..timeout(Duration(minutes: 5), () => 'Stream timeout')
+  ///   ..onTimeout(Duration(minutes: 5), () => 'Stream timeout')
   /// );
   /// ```
+  /// **See also:**
+  /// - [onStream] - Handle full stream
   SelectBuilder<R> onStreamDone<T>(
       Stream<T> stream, FutureOr<R> Function() body,
       {Object? tag, bool Function()? if_}) {
@@ -519,18 +340,20 @@ class SelectBuilder<R> {
   ///         ? 'Task completed: ${result.valueOrNull}'
   ///         : 'Task failed: ${result.errorOrNull}'
   ///     })
-  ///   ..timeout(Duration(minutes: 1), () => 'Task timeout')
+  ///   ..onTimeout(Duration(minutes: 1), () => 'Task timeout')
   /// );
   /// ```
   ///
   /// **See also:**
-  /// - [onRecv] - Alias for this method
-  /// - [onRecvValue] - Only handle successful messages
-  /// - [onRecvError] - Only handle error messages
+  /// - [onRecvValue] - Only handle successful result
+  /// - [onRecvError] - Only handle error result
   SelectBuilder<R> onRecv<T>(
-      Receiver<T> rx, FutureOr<R> Function(RecvResult<T>) body,
-      {Object? tag, bool Function()? if_}) {
-    _branches.add((_ReceiverBranch<T, R>(rx, body, tag: tag), if_));
+    Receiver<T> rx,
+    FutureOr<R> Function(RecvResult<T>) body, {
+    Object? tag,
+    bool Function()? if_,
+  }) {
+    _branches.add((RecvBranch<T, R>(rx, body, tag: tag), if_));
     return this;
   }
 
@@ -546,19 +369,27 @@ class SelectBuilder<R> {
   ///   ..onRecvValue(userInputs, (input) => 'User: $input')
   ///   ..onRecvValue(apiResponses, (response) => 'API: $response')
   ///   ..onRecvError(errorChannel, (error) => 'Error: $error')
-  ///   ..timeout(Duration(seconds: 10), () => 'No activity')
+  ///   ..onTimeout(Duration(seconds: 10), () => 'No activity')
   /// );
   /// ```
+  ///
+  /// **See also:**
+  /// - [onRecv] - Parent
+  /// - [onRecvError] - Only handle error result
   SelectBuilder<R> onRecvValue<T>(Receiver<T> rx, FutureOr<R> Function(T) body,
       {Object? tag,
+      FutureOr<R> Function(RecvError e)? onError,
       FutureOr<R> Function()? onDisconnected,
       bool Function()? if_}) {
     return onRecv<T>(rx, (result) {
       if (result.hasValue) {
-        return body(result.valueOrNull as T);
+        return body(result.value);
       }
       if (result.isDisconnected && onDisconnected != null) {
         return onDisconnected();
+      }
+      if (result.hasError && onError != null) {
+        return onError(result.error);
       }
       return Future<R>.error(StateError('Unexpected RecvResult: $result'));
     }, tag: tag, if_: if_ ?? () => !rx.isDisconnected);
@@ -574,15 +405,19 @@ class SelectBuilder<R> {
   /// await XSelect.run<String>((s) => s
   ///   ..onStream(dataStream, (data) => 'Processing: $data')
   ///   ..onRecvError(errorChannel, (error) => 'Error detected: $error')
-  ///   ..timeout(Duration(minutes: 1), () => 'All systems normal')
+  ///   ..onTimeout(Duration(minutes: 1), () => 'All systems normal')
   /// );
   /// ```
+  ///
+  /// **See also:**
+  /// - [onRecv] - Parent
+  /// - [onRecvValue] - Only handle successful result
   SelectBuilder<R> onRecvError<T>(
-      Receiver<T> rx, FutureOr<R> Function(Object error) body,
+      Receiver<T> rx, FutureOr<R> Function(RecvError error) body,
       {Object? tag, bool Function()? if_}) {
     return onRecv<T>(rx, (result) {
       if (result.hasError) {
-        return body(result);
+        return body(result.error);
       }
       return Future<R>.error(StateError('Unexpected RecvResult: $result'));
     }, tag: tag, if_: if_ ?? () => !rx.isDisconnected);
@@ -606,7 +441,7 @@ class SelectBuilder<R> {
   /// await XSelect.run<String>((s) => s
   ///   ..onRecvValue(controlChannel, (cmd) => 'Command: $cmd')
   ///   ..onSend(outputChannel, processedData, () => 'Data sent')
-  ///   ..timeout(Duration(seconds: 10), () => 'Send timeout')
+  ///   ..onTimeout(Duration(seconds: 10), () => 'Send timeout')
   /// );
   /// ```
   SelectBuilder<R> onSend<T>(
@@ -637,19 +472,11 @@ class SelectBuilder<R> {
   /// ```
   ///
   /// **See also:**
-  /// - [timeout] - Global timeout for the entire selection
+  /// - [onTimeout] - Global timeout for the entire selection
   /// - [onTick] - For recurring timer events
   SelectBuilder<R> onDelay(Duration d, FutureOr<R> Function() body,
       {Object? tag, bool Function()? if_}) {
-    _branches.add((_TimerBranch<R>(d, body, tag: tag), if_));
-    return this;
-  }
-
-  /// Generic "Arm" branch (enables sync selection & true immediacy).
-  SelectBuilder<R> onArm<T>(
-      Arm<T> Function() armFactory, FutureOr<R> Function(T) body,
-      {Object? tag, bool Function()? if_}) {
-    _branches.add((ArmBranch<T, R>(armFactory, body, tag: tag), if_));
+    _branches.add((TimerBranch<R>.once(d, body, tag: tag), if_));
     return this;
   }
 
@@ -659,39 +486,111 @@ class SelectBuilder<R> {
   /// heartbeats, or any regular interval-based processing.
   ///
   /// **Parameters:**
-  /// - [ticker]: Ticker instance to wait on
+  /// - [d]: Duration period
   /// - [body]: Function to call when the ticker fires
   /// - [tag]: Optional tag for debugging
   /// - [if_]: Optional guard condition
   ///
   /// **Example:**
   /// ```dart
-  /// final heartbeat = Ticker.every(Duration(seconds: 5));
-  /// final monitor = Ticker.every(Duration(minutes: 1));
   ///
   /// while (server.isRunning) {
   ///   final action = await XSelect.run<ServerAction>((s) => s
   ///     ..onRecvValue(requests, (req) => ServerAction.handleRequest(req))
-  ///     ..onTick(heartbeat, () => ServerAction.heartbeat())
-  ///     ..onTick(monitor, () => ServerAction.healthCheck())
+  ///     ..onTick(Duration(seconds: 5), () => ServerAction.heartbeat())
+  ///     ..onTick(Duration(minutes: 1), () => ServerAction.healthCheck())
   ///     ..timeout(Duration(minutes: 30), () => ServerAction.idleShutdown())
   ///   );
   ///
   ///   await server.processAction(action);
   /// }
   /// ```
+  ///
+  /// **See also:**
+  /// - [onDelay] - For fixed delayed branch
   SelectBuilder<R> onTick(
-    Ticker ticker,
+    Duration d,
     FutureOr<R> Function() body, {
     Object? tag,
     bool Function()? if_,
   }) {
-    return onArm<void>(() => ticker.arm(), (_) => body(), tag: tag, if_: if_);
+    _branches.add((TimerBranch<R>.period(d, body, tag: tag), if_));
+    return this;
+  }
+
+  /// Adds a branch that becomes ready when the given [Notify] is triggered.
+  ///
+  /// This is a **single-shot** arm: `XSelect.run` will wait until one branch
+  /// fires, then return the callback result. If another branch wins the race,
+  /// this arm is canceled and the internal waiter is torn down, so there are no
+  /// stale subscriptions.
+  ///
+  /// Usage (single-shot select, re-armed by your own loop):
+  /// ```dart
+  /// final stop = Notify();
+  /// var running = true;
+  /// while (running) {
+  ///   final broke = await XSelect.run<bool>((s) => s
+  ///     ..onNotify(stop, () {
+  ///       // handle signal
+  ///       return true; // end this select round
+  ///     })
+  ///     ..onTick<void>(Duration(milliseconds : 100), (_) => false) // any other arms...
+  ///   );
+  ///   if (broke == true) running = false; // you decide outside the select
+  /// }
+  /// ```
+  /// **See also:**
+  /// - [onFuture] - Parent
+  SelectBuilder<R> onNotify(
+    Notify notify,
+    FutureOr<R> Function() action, {
+    Object? tag,
+    bool Function()? if_,
+  }) {
+    return onFuture<void>(
+      // Arm with a fresh waiter for this single-shot select round.
+      notify.notified().$1,
+      (_) => action(),
+      tag: tag,
+      if_: if_,
+    );
+  }
+
+  /// Adds a branch that listens to [Notify] but only **once** in the lifetime
+  /// of this builder instance (useful for one-shot shutdown signals).
+  ///
+  /// Note: since `XSelect.run` is single-shot, “once” here simply gates
+  /// arming when you re-create the builder in a loop; after the first trigger,
+  /// the arm won’t be armed again (until you reset your own flag).
+  ///
+  /// **See also:**
+  /// - [onNotify] - Parent
+  SelectBuilder<R> onNotifyOnce(
+    Notify notify,
+    FutureOr<R> Function() action, {
+    Object? tag,
+    bool Function()? if_,
+  }) {
+    var consumed = false;
+    return onNotify(
+      notify,
+      () {
+        // Mark consumed on first trigger.
+        consumed = true;
+        return action();
+      },
+      tag: tag,
+      if_: () {
+        if (consumed) return false; // do not arm again
+        return if_ == null ? true : if_();
+      },
+    );
   }
 
   /// Add a global timeout to the entire selection.
   ///
-  /// Unlike [delay] or [onDelay], this applies to the entire selection.
+  /// Unlike [onDelay], this applies to the entire selection.
   /// If no other branch completes within the timeout duration, the timeout
   /// branch will fire and all other operations will be canceled.
   ///
@@ -706,12 +605,11 @@ class SelectBuilder<R> {
   ///   ..onFuture(primaryApi(), (response) => response)
   ///   ..onFuture(secondaryApi(), (response) => response)
   ///   ..onFuture(cacheApi(), (response) => response)
-  ///   ..timeout(Duration(seconds: 30), () => ApiResponse.timeout())
+  ///   ..onTimeout(Duration(seconds: 30), () => ApiResponse.timeout())
   /// );
   /// ```
-  SelectBuilder<R> timeout(Duration d, FutureOr<R> Function() body) {
-    _timeout = d;
-    _onTimeout = body;
+  SelectBuilder<R> onTimeout(Duration d, FutureOr<R> Function() body) {
+    _branches.add((TimerBranch<R>.once(d, body, tag: 'timeout'), null));
     return this;
   }
 
@@ -764,7 +662,7 @@ class SelectBuilder<R> {
     }
 
     // Apply optional guards
-    final active = <_Branch<R>>[];
+    final active = <SelectBranch<R>>[];
     for (final (b, guard) in _branches) {
       if (guard?.call() == false) continue;
       active.add(b);
@@ -779,7 +677,7 @@ class SelectBuilder<R> {
       final n = active.length;
       final offset = DateTime.now().microsecondsSinceEpoch % n;
       if (offset != 0) {
-        final rotated = <_Branch<R>>[
+        final rotated = <SelectBranch<R>>[
           ...active.skip(offset),
           ...active.take(offset),
         ];
@@ -789,85 +687,67 @@ class SelectBuilder<R> {
       }
     }
 
+    // Fast path sync
+    for (var i = 0; i < active.length; i++) {
+      final hit = active[i].attachSync(resolve: resolve, index: i);
+      if (hit && resolved) return completer.future;
+    }
+
     // Attach branches
     for (var i = 0; i < active.length; i++) {
-      final immediate = active[i].attach(
+      active[i].attach(
         resolve: resolve,
         registerCanceller: registerCanceller,
         index: i,
       );
-      if (immediate && resolved) return completer.future;
-    }
-
-    // Optional global timeout
-    if (_timeout != null && _onTimeout != null) {
-      final t = Timer(_timeout!, () => resolve(-1, 'timeout', _onTimeout!()));
-      registerCanceller(() {
-        if (t.isActive) t.cancel();
-      });
+      if (resolved) return completer.future;
     }
 
     return completer.future;
   }
 
-  /// Synchronous fast-path over immediate arms only.
+  /// Synchronous fast-path over attachSync only.
   R? syncRun() {
     if (_branches.isEmpty) {
       throw StateError('Select requires at least one branch');
     }
 
-    for (final (b, guard) in _branches) {
-      if (guard?.call() == false) continue;
-      if (b is ArmBranch<dynamic, R>) {
-        final a = b.armFactory();
-        if (a is _ArmImmediate) {
-          final v = (b.body)(a.value);
-          // If the body returns a Future, this is not a true sync resolution.
-          return v is Future ? null : v;
-        }
+    // Filtrer guards
+    final active = <SelectBranch<R>>[];
+    for (final (b, g) in _branches) {
+      if (g?.call() != false) active.add(b);
+    }
+    if (active.isEmpty) return null;
+
+    // Fairness
+    if (!_ordered && active.length > 1) {
+      final n = active.length;
+      final offset = DateTime.now().microsecondsSinceEpoch % n;
+      final rotated = <SelectBranch<R>>[
+        ...active.skip(offset),
+        ...active.take(offset)
+      ];
+      active
+        ..clear()
+        ..addAll(rotated);
+    }
+
+    R? out;
+    var done = false;
+
+    void resolve(int i, Object? tag, FutureOr<R> v) {
+      if (done) return;
+      if (v is Future) return;
+      done = true;
+      out = v;
+    }
+
+    for (var i = 0; i < active.length; i++) {
+      if (active[i].attachSync(resolve: resolve, index: i) && done) {
+        return out;
       }
     }
 
     return null;
-  }
-}
-
-/// Periodic ticker that exposes an `Arm<void>`:
-/// - If `now >= nextAt` ⇒ `Arm.immediate` and `nextAt += period`.
-/// - Otherwise ⇒ `Arm.pending` with a cancelable `Timer` until `nextAt`.
-class Ticker {
-  final Duration period;
-  DateTime _nextAt;
-
-  Ticker._(this.period, this._nextAt);
-
-  /// Start a periodic ticker. By default the first tick is at `now + period`.
-  factory Ticker.every(Duration period, {DateTime? startAt}) {
-    final now = DateTime.now();
-    return Ticker._(period, (startAt ?? now).add(period));
-  }
-
-  /// Return a selectable arm (immediate or pending).
-  Arm<void> arm() {
-    final now = DateTime.now();
-    if (!now.isBefore(_nextAt)) {
-      _nextAt = _nextAt.add(period);
-      return Arm.immediate(null);
-    }
-    final delay = _nextAt.difference(now);
-    final completer = Completer<void>();
-    final t = Timer(delay, () {
-      _nextAt = _nextAt.add(period);
-      if (!completer.isCompleted) completer.complete();
-    });
-    return Arm.pending(completer.future, () {
-      if (t.isActive) t.cancel();
-    });
-  }
-
-  /// Reset the schedule (optional).
-  void reset({DateTime? startAt}) {
-    final now = DateTime.now();
-    _nextAt = (startAt ?? now).add(period);
   }
 }

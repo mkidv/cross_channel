@@ -1,72 +1,45 @@
 import 'dart:async';
 import 'package:cross_channel/oneshot.dart';
+import 'package:cross_channel/src/metrics.dart';
 import 'utils.dart';
 
 Future<void> main(List<String> args) async {
   final (iters, csv, _) = parseArgs(args);
 
+  MetricsConfig.enabled = true;
+  MetricsConfig.sampleLatency = true;
+  MetricsConfig.exporter = csv ? CsvExporter() : StdExporter();
   // Warmup
-  await _benchCreateSendRecv(50_000, 'warmup');
+  await _benchSendRecvSamePair(50_000, 'warmup');
 
-  final results = <Stats>[];
-
-  results.add(await _benchCreateSendRecv(
+  await _benchSendRecvSamePair(
     iters,
-    'oneshot create+send+recv',
-  ));
-  results.add(await _benchReuseSenderRecv(
-    iters,
-    'oneshot reuse sender (new rx)',
-  ));
+    'send/receive',
+  );
 
-  if (csv) {
-    print('suite,case,mops,ns_per_op,max_latency_us,notes');
-    for (final r in results) {
-      print(r.toCsv(suite: 'ONESHOT'));
-    }
-    return;
-  }
+  _benchTrySendRecvSamePair(iters, 'try send/receive');
 
-  print('\n=== ONESHOT Bench (Dart VM) ===');
-  for (final r in results) {
-    print(r.toString());
-  }
+  await benchPipeline(OneShot.channel<int>(metricsId: 'pipeline'), iters);
+
+  MetricsRegistry().export();
 }
 
-/// create N channels, send, receive, then let GC do its job.
-Future<Stats> _benchCreateSendRecv(int iters, String label) async {
-  var maxNs = 0;
-  final sw = Stopwatch()..start();
+Future<void> _benchSendRecvSamePair(int iters, String label) async {
+  final (tx, rx) = OneShot.channel<int>(metricsId: label);
   for (var i = 0; i < iters; i++) {
-    final (tx, rx) = OneShot.channel<int>();
-    final sendFut = tx.send(i);
-    final t0 = Stopwatch()..start();
-    await rx.recv();
-    final dt = t0.elapsedMicroseconds * 1000;
-    if (dt > maxNs) maxNs = dt;
-    // semantics: send returns immediately in our impl; just await to be fair
-    await sendFut;
-  }
-  sw.stop();
-  return Stats(label, iters, sw.elapsed, maxNs);
-}
-
-/// reuse the sender, only create a new receiver.
-/// Useful to see the allocation cost of the pair.
-Future<Stats> _benchReuseSenderRecv(int iters, String label) async {
-  var maxNs = 0;
-  final sw = Stopwatch()..start();
-  for (var i = 0; i < iters; i++) {
-    // recreate the pair (no separate factory for RX only in the API),
-    // but we still measure a second simple form.
-    final (tx, rx) = OneShot.channel<int>();
-    final _ = await tx.send(i);
-    final t0 = Stopwatch()..start();
+    final sf = tx.send(i);
     final r = await rx.recv();
-    final dt = t0.elapsedMicroseconds * 1000;
-    if (dt > maxNs) maxNs = dt;
-    if (!r.hasValue) throw StateError('unexpected recv error');
+    if (!r.hasValue) throw StateError('unexpected');
+    await sf;
   }
-  sw.stop();
-  return Stats(label, iters, sw.elapsed, maxNs);
+}
+
+void _benchTrySendRecvSamePair(int iters, String label) {
+  final (tx, rx) = OneShot.channel<int>(metricsId: label);
+  for (var i = 0; i < iters; i++) {
+    final sf = tx.trySend(i);
+    final r = rx.tryRecv();
+    if (!r.hasValue) throw StateError('unexpected');
+    sf;
+  }
 }

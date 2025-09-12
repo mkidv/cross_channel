@@ -139,12 +139,14 @@ extension ReceivePortToChannelX on ReceivePort {
     OnDrop<T>? onDrop,
     bool chunked = true,
     bool strict = true,
+    String? metricsId,
   }) {
     final (tx, rx) = Mpsc.channel<T>(
       capacity: capacity,
       policy: policy,
       onDrop: onDrop,
       chunked: chunked,
+      metricsId: metricsId,
     );
     listen((msg) {
       if (msg is T) {
@@ -168,12 +170,14 @@ extension ReceivePortToChannelX on ReceivePort {
     OnDrop<T>? onDrop,
     bool chunked = true,
     bool strict = true,
+    String? metricsId,
   }) {
     final (tx, rx) = Mpmc.channel<T>(
       capacity: capacity,
       policy: policy,
       onDrop: onDrop,
       chunked: chunked,
+      metricsId: metricsId,
     );
     listen((msg) {
       if (msg is T) {
@@ -223,24 +227,25 @@ extension ReceivePortToChannelX on ReceivePort {
     OnDrop<T>? onDrop,
     bool chunked = true,
     bool strict = true,
+    String? metricsId,
   }) {
     switch (type) {
       case ChannelType.mpsc:
         return toMpsc<T>(
-          capacity: capacity,
-          policy: policy,
-          onDrop: onDrop,
-          chunked: chunked,
-          strict: strict,
-        );
+            capacity: capacity,
+            policy: policy,
+            onDrop: onDrop,
+            chunked: chunked,
+            strict: strict,
+            metricsId: metricsId);
       case ChannelType.mpmc:
         return toMpmc<T>(
-          capacity: capacity,
-          policy: policy,
-          onDrop: onDrop,
-          chunked: chunked,
-          strict: strict,
-        );
+            capacity: capacity,
+            policy: policy,
+            onDrop: onDrop,
+            chunked: chunked,
+            strict: strict,
+            metricsId: metricsId);
     }
   }
 }
