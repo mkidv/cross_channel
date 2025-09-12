@@ -181,7 +181,8 @@ class OneShot {
   /// ```
   static (OneShotSender<T>, OneShotReceiver<T>) channel<T>(
       {bool consumeOnce = false, String? metricsId}) {
-    final core = _OneShotCore<T>(consumeOnce: consumeOnce, metricsId: metricsId);
+    final core =
+        _OneShotCore<T>(consumeOnce: consumeOnce, metricsId: metricsId);
     final tx = core.attachSender((c) => OneShotSender<T>._(c));
     final rx = core.attachReceiver((c) => OneShotReceiver<T>._(c));
     return (tx, rx);

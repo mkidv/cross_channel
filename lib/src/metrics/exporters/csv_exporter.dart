@@ -19,7 +19,7 @@ final class CsvExporter extends MetricsExporter {
       gm.trySendOk, gm.trySendFail, gm.tryRecvOk, gm.tryRecvEmpty,
       '', '', '', // global latencies not computed
       '', '', '',
-      '', '', // global rates not computed  
+      '', '', // global rates not computed
       '', '', '', // global drop/failure rates not computed
       gm.channels.length, // channel count
     ]);
@@ -50,10 +50,10 @@ final class CsvExporter extends MetricsExporter {
       _fmtNum(s.recvP50),
       _fmtNum(s.recvP95),
       _fmtNum(s.recvP99),
-      _fmtNum(mops),   
+      _fmtNum(mops),
       _fmtNum(nsPerOp, 1),
       _fmtNum(s.dropRate, 4),
-      _fmtNum(s.trySendFailureRate, 4), 
+      _fmtNum(s.trySendFailureRate, 4),
       _fmtNum(s.tryRecvEmptyRate, 4),
       '', // not a global snapshot
     ]);
@@ -64,7 +64,10 @@ final class CsvExporter extends MetricsExporter {
   static String _esc(Object? v) {
     final s = v?.toString() ?? '';
     if (s.isEmpty) return '';
-    final needQuotes = s.contains(',') || s.contains('"') || s.contains('\n') || s.contains('\r');
+    final needQuotes = s.contains(',') ||
+        s.contains('"') ||
+        s.contains('\n') ||
+        s.contains('\r');
     if (!needQuotes) return s;
     return '"${s.replaceAll('"', '""')}"';
   }

@@ -2,7 +2,7 @@ part of '../branches.dart';
 
 /// SelectBranch implementation for racing channel receive operations.
 ///
-/// Handles both synchronous (tryRecv) and asynchronous (recvCancelable) 
+/// Handles both synchronous (tryRecv) and asynchronous (recvCancelable)
 /// receive operations with proper cancellation support.
 class RecvBranch<T, R> implements SelectBranch<R> {
   const RecvBranch(this.rx, this.body, {this.tag});

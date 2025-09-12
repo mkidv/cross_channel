@@ -72,7 +72,11 @@ final class StdExporter extends MetricsExporter {
         _padL(_fmtLatency(s.recvP95), latW),
         _padL(_fmtLatency(s.recvP99), latW),
       ],
-      _padL(s.recvOpsPerSec == 0 ? '–' : '${_fmtFixed(s.recvOpsPerSec / 1e6, 2)} M', rateW),
+      _padL(
+          s.recvOpsPerSec == 0
+              ? '–'
+              : '${_fmtFixed(s.recvOpsPerSec / 1e6, 2)} M',
+          rateW),
       _padL(s.nsByOp == 0 ? '–' : _fmtFixed(s.nsByOp, 1), rateW),
     ];
 

@@ -12,8 +12,8 @@ final class P2Quantiles {
   late final List<double> _np;
   late final List<double> _n;
 
-  bool _ready = false;         // becomes true after bootstrap
-  int _count = 0;              // number of ingested samples
+  bool _ready = false; // becomes true after bootstrap
+  int _count = 0; // number of ingested samples
   final List<double> _boot = <double>[]; // bootstrap buffer (first m samples)
 
   P2Quantiles(Iterable<double> ps)
@@ -191,7 +191,10 @@ final class P2Quantiles {
 
       final qPar = _parabolic(i, s);
       double newQ;
-      if (qPar != null && qPar.isFinite && qPar > _q[i - 1] && qPar < _q[i + 1]) {
+      if (qPar != null &&
+          qPar.isFinite &&
+          qPar > _q[i - 1] &&
+          qPar < _q[i + 1]) {
         newQ = qPar;
       } else {
         newQ = _linear(i, s);

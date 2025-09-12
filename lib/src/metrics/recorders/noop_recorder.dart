@@ -2,7 +2,7 @@ part of '../recorders.dart';
 
 final class NoopMetricsRecorder implements MetricsRecorder {
   const NoopMetricsRecorder();
-  
+
   @override
   @pragma('vm:prefer-inline')
   int startSendTimer() => 0;
@@ -59,4 +59,3 @@ final class NoopMetricsRecorder implements MetricsRecorder {
   @pragma('vm:prefer-inline')
   void markClosed() {}
 }
-

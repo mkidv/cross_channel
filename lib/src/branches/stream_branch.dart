@@ -2,7 +2,7 @@ part of '../branches.dart';
 
 /// SelectBranch implementation for racing Stream operations.
 ///
-/// Listens to the first event from a stream and properly cancels the 
+/// Listens to the first event from a stream and properly cancels the
 /// subscription when the branch loses the race.
 class StreamBranch<T, R> implements SelectBranch<R> {
   const StreamBranch(this.stream, this.body, {this.tag});
