@@ -19,7 +19,7 @@ Fast & flexible channels for Dart/Flutter.
 Rust-style concurrency primitives: **MPSC, MPMC, SPSC, OneShot**, plus **drop policies**, **latest-only**, **select**, stream/isolate/web adapters.
 
 <p align="center">
-  <b>Bench-tested</b> · <code>~1.7–1.9 Mops/s</code> for classic queues · <code>~130–140 Mops/s</code> for LatestOnly
+  <b>Bench-tested</b> · <code>~1.6–1.9 Mops/s</code>
 </p>
 
 ## ✨ Features
