@@ -13,6 +13,14 @@
 
 ---
 
+## [0.8.1] – 2025-09-12
+
+### Fixed
+
+- Performance claims in README
+
+---
+
 ## [0.8.0] – 2025-09-12
 
 ### Added
