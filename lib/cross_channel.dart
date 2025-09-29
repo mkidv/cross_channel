@@ -102,14 +102,18 @@ final class XChannel {
   /// - [XChannel.spsc] for efficient single-producer scenarios
   /// - [XChannel.mpscLatest] for latest-only progress updates
   /// - [Mpsc.channel], [Mpsc.unbounded], [Mpsc.bounded] for low-level api
-  static (MpscSender<T>, MpscReceiver<T>) mpsc<T>({
-    int? capacity,
-    DropPolicy policy = DropPolicy.block,
-    OnDrop<T>? onDrop,
-    bool chunked = true,
-  }) =>
+  static (MpscSender<T>, MpscReceiver<T>) mpsc<T>(
+          {int? capacity,
+          DropPolicy policy = DropPolicy.block,
+          OnDrop<T>? onDrop,
+          bool chunked = true,
+          String? metricsId}) =>
       Mpsc.channel<T>(
-          capacity: capacity, policy: policy, onDrop: onDrop, chunked: chunked);
+          capacity: capacity,
+          policy: policy,
+          onDrop: onDrop,
+          chunked: chunked,
+          metricsId: metricsId);
 
   /// Creates an MPMC (Multi-Producer Multi-Consumer) channel.
   ///
@@ -157,14 +161,18 @@ final class XChannel {
   /// - [XChannel.mpsc] for single-consumer scenarios
   /// - [XChannel.mpmcLatest] for competitive latest-only consumption
   /// - [Mpmc.channel], [Mpmc.unbounded], [Mpmc.bounded] for low-level api
-  static (MpmcSender<T>, MpmcReceiver<T>) mpmc<T>({
-    int? capacity,
-    DropPolicy policy = DropPolicy.block,
-    OnDrop<T>? onDrop,
-    bool chunked = true,
-  }) =>
+  static (MpmcSender<T>, MpmcReceiver<T>) mpmc<T>(
+          {int? capacity,
+          DropPolicy policy = DropPolicy.block,
+          OnDrop<T>? onDrop,
+          bool chunked = true,
+          String? metricsId}) =>
       Mpmc.channel<T>(
-          capacity: capacity, policy: policy, onDrop: onDrop, chunked: chunked);
+          capacity: capacity,
+          policy: policy,
+          onDrop: onDrop,
+          chunked: chunked,
+          metricsId: metricsId);
 
   /// Creates a OneShot channel for single-value delivery patterns.
   ///
@@ -217,10 +225,9 @@ final class XChannel {
   /// - [XChannel.mpsc] for multi-value streaming
   /// - [Notify] for payload-free signaling
   /// - [OneShot.channel] for low-level api
-  static (OneShotSender<T>, OneShotReceiver<T>) oneshot<T>({
-    bool consumeOnce = false,
-  }) {
-    return OneShot.channel<T>(consumeOnce: consumeOnce);
+  static (OneShotSender<T>, OneShotReceiver<T>) oneshot<T>(
+      {bool consumeOnce = false, String? metricsId}) {
+    return OneShot.channel<T>(consumeOnce: consumeOnce, metricsId: metricsId);
   }
 
   /// Creates an SPSC (Single-Producer Single-Consumer) channel.
@@ -259,8 +266,9 @@ final class XChannel {
   /// - [XChannel.mpsc] for multiple producers
   /// - [XChannel.mpmc] for multiple consumers
   /// - [Spsc.channel] for low-level api
-  static (SpscSender<T>, SpscReceiver<T>) spsc<T>({required int capacity}) {
-    return Spsc.channel<T>(capacity);
+  static (SpscSender<T>, SpscReceiver<T>) spsc<T>(
+      {required int capacity, String? metricsId}) {
+    return Spsc.channel<T>(capacity, metricsId: metricsId);
   }
 
   /// Creates a latest-only MPSC channel that coalesces values.
@@ -296,7 +304,8 @@ final class XChannel {
   /// **See also:**
   /// - [XChannel.mpmcLatest] for competitive consumption
   /// - [Mpsc.latest] for low-level api
-  static (MpscSender<T>, MpscReceiver<T>) mpscLatest<T>() => Mpsc.latest<T>();
+  static (MpscSender<T>, MpscReceiver<T>) mpscLatest<T>({String? metricsId}) =>
+      Mpsc.latest<T>(metricsId: metricsId);
 
   /// Creates a latest-only MPMC channel with competitive consumption.
   ///
@@ -328,5 +337,6 @@ final class XChannel {
   /// **See also:**
   /// - [XChannel.mpscLatest] for single consumer
   /// - [Mpmc.latest] for low-level api
-  static (MpmcSender<T>, MpmcReceiver<T>) mpmcLatest<T>() => Mpmc.latest<T>();
+  static (MpmcSender<T>, MpmcReceiver<T>) mpmcLatest<T>({String? metricsId}) =>
+      Mpmc.latest<T>(metricsId: metricsId);
 }

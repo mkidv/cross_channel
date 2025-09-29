@@ -11,6 +11,16 @@
 - **Cancellation scopes & tokens** integrated with `Select`.
 - **Rate-limiting adapters** on senders/receivers: `throttle`, `debounce`, `window`.
 
+
+---
+
+## [0.8.2] – 2025-09-29
+
+### Added
+
+- **XChannel**
+  - Add metricsId paremeter to `XChannel` factories
+
 ---
 
 ## [0.8.1] – 2025-09-12
