@@ -10,9 +10,20 @@
 
 ---
 
+## [0.9.1] - 2026-02-27
+
+### Fixed
+
+- Fixed unawaited futures and static analysis warnings in debug apps and tests
+- Fixed markdown exports in `lib/broadcast.dart`
+- Clarified native cross-isolate support (Universal Handles) directly in the `README.md` examples
+
+---
+
 ## [0.9.0] – 2026-01-24
 
 ### Added
+
 - **Broadcast Channel** (`XChannel.broadcast`):
   - Single-Producer Multi-Consumer (SPMC) Ring Buffer.
   - **Pub/Sub semantics**: All subscribers receive all messages.
@@ -188,7 +199,6 @@
 ### Added
 
 - **Notify** primitive:
-
   - `notified()` → `(Future<void>, cancel)` that consumes a permit if available, otherwise waits.
   - `notifyOne()` wakes one waiter or stores a permit; `notifyAll()` wakes all current waiters.
   - `close()` wakes waiters with `disconnected`.

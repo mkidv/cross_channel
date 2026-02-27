@@ -16,8 +16,7 @@
 # cross_channel
 
 Fast & flexible channels for Dart/Flutter.
-Rust-style concurrency primitives: **MPSC, MPMC, SPSC, OneShot**.
-Features: **Universal Handles** (transparent local optimization), **Drop policies**, **Latest-only**, **Select**, and robust **Isolate/Web adapters**.
+A complete concurrency toolkit providing Rust-style synchronization primitives: **MPSC, MPMC, SPSC, OneShot, and Broadcast (SPMC)**.
 
 <p align="center">
   <b>Bench-tested</b> · <code>~1.6–1.9 Mops/s</code>
@@ -25,16 +24,15 @@ Features: **Universal Handles** (transparent local optimization), **Drop policie
 
 ## ✨ Features
 
-- **Drop policies**: `block`, `oldest`, `newest`
-- **LatestOnly** buffers (coalesce to last)
-- **Broadcast Ring** (Single-Producer Multi-Consumer) with lag detection & replay
-- **Sender Rate Limiting**: `throttle` and `debounce` at the source
-- **Select** over Futures, Streams, Receivers & Timers
-- **Backpressure** with bounded queues; **rendezvous** (`capacity=0`)
-- **Notify** primitive (lightweight wakeups: `notifyOne`, `notifyAll`, `notified`)
-- **Stream adapters**: `toBroadcastStream`, `redirectToSender`
-- **Isolate/Web adapters**: request/reply, `ReceivePort` / `MessagePort` bridges
-- **Battle-tested**: unit + stress tests, micro-benchmarks included
+- **Universal Handles**: Transparent zero-overhead local optimization with native cross-isolate support (just pass the channel to `Isolate.spawn`).
+- **Broadcast Ring**: Single-Producer Multi-Consumer (SPMC) ring buffer with publisher history replay and lag detection for slow subscribers.
+- **Select (`XSelect`)**: Macro-like multiplexing over Futures, Streams, Timers, and Channels with non-blocking fast paths and loser cancellation.
+- **Rich Topology**: Multi-producer / multi-consumer topologies with drop policies (`block`, `oldest`, `newest`) and backpressure (`capacity=0` rendezvous).
+- **LatestOnly Buffers**: Specifically tuned for UI and sensors (always coalesces to the latest value).
+- **Sender Rate Limiting**: Limit noisy events at the source with built-in `throttle` and `debounce` modifiers.
+- **Unified Remote Protocol**: Credit-based flow control ensuring remote Isolates/Workers never crash on Out-of-Memory.
+- **Web & Stream Adapters**: First-class `MessagePort` bridging for `package:web` and rich `Stream` integration.
+- **Notify Primitive**: Ultra-lightweight `notifyOne()`/`notified()` wakeups for control-plane synchronization.
 
 ## 📦 Install
 
@@ -290,7 +288,6 @@ await XSelect.run<void>((s) => s
 Cheat-sheet
 
 - **Channels (Receiver)**
-
   - onRecv(rx, (RecvResult<T>) -> R, {tag}) (sync fast-path via tryRecv)
 
   - onRecvValue(rx, (T) -> R, {onDisconnected, tag})
@@ -298,12 +295,10 @@ Cheat-sheet
   - onRecvError(rx, (Object, StackTrace?) -> R
 
 - **Notify**
-
   - onNotify(Notify n, R Function() body, {Object? tag})
   - onNotifyOnce(Notify n, R Function() body, {Object? tag})
 
 - **Futures**
-
   - onFuture(future, (T) -> R, {tag})
 
   - onFutureValue(future, (T) -> R, {tag})
@@ -311,31 +306,25 @@ Cheat-sheet
   - onFutureError(future, (Object, StackTrace?) -> R, {tag})
 
 - **Streams**
-
   - onStream(stream, (T) -> R, {tag})
 
   - onStreamDone(stream, () -> R, {tag})
 
 - **Timers**
-
   - onDelay(Duration, () -> R, {tag}) (one-shot)
 
   - onTick(Duration, () -> R, {tag}) (every)
 
 - **Sending**
-
   - onSend(sender, value, {tag}) (races a send; wins when the send completes)
 
 - **Sync fast-path**
-
   - XSelect.syncRun(builder) → only immediate, non-blocking arms (e.g., tryRecv, already-due timers).
 
 - **Guards**
-
   - if\_(() => bool) to enable/disable a branch without rebuilding the selection.
 
 - **Fairness vs order**
-
   - Fairness by rotation is default; call .ordered() to preserve declaration order
 
 ```dart
@@ -411,18 +400,39 @@ await someStream.redirectToSender(tx, dropWhenFull: true);
 
 ### Isolates
 
+Channels **natively** support cross-isolate communication (Universal Handles). Just pass the `Sender` or `Receiver` directly to your isolate!
+
+```dart
+import 'dart:isolate';
+import 'package:cross_channel/cross_channel.dart';
+
+void main() async {
+  final (tx, rx) = XChannel.mpsc<String>();
+
+  // Pass the sender directly to the isolate
+  await Isolate.spawn((Sender<String> s) {
+    s.send('Hello from isolate!');
+  }, tx);
+
+  final msg = await rx.recv();
+  print(msg.valueOrNull);
+}
+```
+
+You can also use extension methods on raw ports for legacy bridging or `SendPort.request` for RPC:
+
 ```dart
 import 'dart:isolate';
 import 'package:cross_channel/isolate_extension.dart';
 
-// Typed request/reply
+// Typed request/reply over a standard SendPort
 final reply = await someSendPort.request<Map<String, Object?>>(
   'get_user',
   data: {'id': 42},
   timeout: const Duration(seconds: 3),
 );
 
-// Port → channel bridge
+// Port → channel bridge (legacy integration)
 final rp = ReceivePort();
 final (tx, rx) = rp.toMpsc<MyEvent>(capacity: 512, strict: true);
 ```
@@ -532,11 +542,11 @@ cancel(); // attempts to abort the wait if still pending
 
 ### BROADCAST (SPMC Ring)
 
-| case                          | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
-| ----------------------------- | ------------: | -----------: | ------------: |
-| broadcast pipeline (1P/1C)    |          0.56 |       1792.6 |         306.9 |
-| broadcast pipeline (1P/4C)    |          0.93 |       1080.8 |         156.6 |
-| broadcast pipeline (1P/8C)    |          0.91 |       1098.9 |         247.6 |
+| case                       | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
+| -------------------------- | ------------: | -----------: | ------------: |
+| broadcast pipeline (1P/1C) |          0.56 |       1792.6 |         306.9 |
+| broadcast pipeline (1P/4C) |          0.93 |       1080.8 |         156.6 |
+| broadcast pipeline (1P/8C) |          0.91 |       1098.9 |         247.6 |
 
 ### How to bench
 
@@ -626,12 +636,14 @@ final (tx, rx) = XChannel.mpsc<String>(capacity: 1000);
 ```
 
 **Available exporters:**
+
 - `NoopExporter` - Default (discards metrics)
 - `StdExporter` - Formatted console output with colors
 - `CsvExporter` - Export to CSV format (stdout or file)
 - Custom exporters by extending `MetricsExporter`
 
 **Metrics collected:**
+
 - Operation counts: `sent`, `recv`, `dropped`, `closed`
 - Latency percentiles: P50, P95, P99 (via P² algorithm)
 - Performance: ops/second, ns/operation, drop rates
@@ -652,32 +664,39 @@ ts,type,id,sent,recv,dropped,closed,trySendOk,trySendFail,tryRecvOk,tryRecvEmpty
 **Field Groups:**
 
 **Metadata:**
+
 - `ts` - Timestamp (ISO8601)
 - `type` - 'global' or 'channel'
 - `id` - Channel identifier (empty for global)
 
 **Core Operations:**
+
 - `sent`, `recv` - Total blocking operation counts
 - `dropped`, `closed` - Loss and lifecycle events
 
 **Non-blocking Operations:**
+
 - `trySendOk`, `trySendFail` - Non-blocking send results
 - `tryRecvOk`, `tryRecvEmpty` - Non-blocking receive results
 
 **Latency Percentiles (nanoseconds):**
+
 - `send_p50_ns`, `send_p95_ns`, `send_p99_ns` - Send operation latencies
 - `recv_p50_ns`, `recv_p95_ns`, `recv_p99_ns` - Receive operation latencies
 
 **Performance Metrics:**
+
 - `mops` - Million operations per second
 - `ns_per_op` - Nanoseconds per operation
 
 **Quality Metrics:**
+
 - `drop_rate` - Percentage of dropped messages (0.0-1.0)
 - `try_send_failure_rate` - Non-blocking send failure rate (0.0-1.0)
 - `try_recv_empty_rate` - Non-blocking receive empty rate (0.0-1.0)
 
 **System:**
+
 - `channels_count` - Total active channels (global snapshots only)
 
 ## 🧪 Testing
