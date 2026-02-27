@@ -15,9 +15,11 @@ class OneShot {
     bool consumeOnce = false,
     String? metricsId,
   }) {
-    final core = _OneShotCore<T>(consumeOnce: consumeOnce, metricsId: metricsId);
+    final core =
+        _OneShotCore<T>(consumeOnce: consumeOnce, metricsId: metricsId);
     final tx = core.attachSender((c) => OneShotSender<T>._(c.id, c.sendPort));
-    final rx = core.attachReceiver((c) => OneShotReceiver<T>._(c.id, c.sendPort));
+    final rx =
+        core.attachReceiver((c) => OneShotReceiver<T>._(c.id, c.sendPort));
     return (tx, rx);
   }
 }

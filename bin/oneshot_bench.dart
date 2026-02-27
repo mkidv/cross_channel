@@ -25,7 +25,8 @@ Future<void> main(List<String> args) async {
   await benchPipeline(OneShot.channel<int>(metricsId: 'pipeline'), iters);
 
   await benchCrossIsolatePipeline(
-      OneShot.channel<int>(metricsId: 'cross-isolate pipeline (IsoA→IsoB)'), iters);
+      OneShot.channel<int>(metricsId: 'cross-isolate pipeline (IsoA→IsoB)'),
+      iters);
 
   MetricsRegistry().export();
   exit(0);

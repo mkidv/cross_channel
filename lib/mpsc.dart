@@ -23,9 +23,10 @@ class Mpsc {
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx = core.attachSender((c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
-    final rx =
-        core.attachReceiver((c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core.attachSender(
+        (c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final rx = core.attachReceiver(
+        (c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -34,16 +35,19 @@ class Mpsc {
       throw ArgumentError.value(capacity, 'capacity', 'Must be >= 0');
     }
 
-    final buf = (capacity == 0) ? RendezvousBuffer<T>() : BoundedBuffer<T>(capacity: capacity);
+    final buf = (capacity == 0)
+        ? RendezvousBuffer<T>()
+        : BoundedBuffer<T>(capacity: capacity);
     final core = StandardChannelCore<T>(
       buf,
       allowMultiSenders: true,
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx = core.attachSender((c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
-    final rx =
-        core.attachReceiver((c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core.attachSender(
+        (c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final rx = core.attachReceiver(
+        (c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -61,18 +65,21 @@ class Mpsc {
         : (capacity == 0)
             ? RendezvousBuffer<T>()
             : BoundedBuffer<T>(capacity: capacity);
-    final bool usePolicy = capacity != null && capacity > 0 && policy != DropPolicy.block;
-    final ChannelBuffer<T> buf =
-        usePolicy ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop) : inner;
+    final bool usePolicy =
+        capacity != null && capacity > 0 && policy != DropPolicy.block;
+    final ChannelBuffer<T> buf = usePolicy
+        ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop)
+        : inner;
     final core = StandardChannelCore<T>(
       buf,
       allowMultiSenders: true,
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx = core.attachSender((c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
-    final rx =
-        core.attachReceiver((c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core.attachSender(
+        (c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final rx = core.attachReceiver(
+        (c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -84,9 +91,10 @@ class Mpsc {
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx = core.attachSender((c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
-    final rx =
-        core.attachReceiver((c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core.attachSender(
+        (c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final rx = core.attachReceiver(
+        (c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
     return (tx, rx);
   }
 }
@@ -129,13 +137,15 @@ final class MpscSender<T> extends Sender<T> implements CloneableSender<T> {
     if (_closed) throw StateError('Sender closed');
     final local = ChannelRegistry.get(channelId);
     if (local is StandardChannelCore<T>) {
-      return local.attachSender((c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+      return local.attachSender(
+          (c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
     }
     return MpscSender<T>._(channelId, remotePort, metricsId: metricsId);
   }
 }
 
-final class MpscReceiver<T> extends Receiver<T> implements KeepAliveReceiver<T> {
+final class MpscReceiver<T> extends Receiver<T>
+    implements KeepAliveReceiver<T> {
   MpscReceiver._(this.channelId, this.remotePort, {this.metricsId});
 
   @override

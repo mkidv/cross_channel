@@ -71,5 +71,6 @@ Future<void> runBench(int iters) async {
   final nsPerOp = ns / iters;
   final mops = iters / sw.elapsedMicroseconds;
 
-  print('Result: ${mops.toStringAsFixed(2)} Mops/s, ${nsPerOp.toStringAsFixed(1)} ns/op');
+  print(
+      'Result: ${mops.toStringAsFixed(2)} Mops/s, ${nsPerOp.toStringAsFixed(1)} ns/op');
 }

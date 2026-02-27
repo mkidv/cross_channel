@@ -52,7 +52,8 @@ final class SpscSender<T> extends Sender<T> implements KeepAliveSender<T> {
   }
 }
 
-final class SpscReceiver<T> extends Receiver<T> implements KeepAliveReceiver<T> {
+final class SpscReceiver<T> extends Receiver<T>
+    implements KeepAliveReceiver<T> {
   SpscReceiver._(this.channelId, this.remotePort);
 
   @override

@@ -1,15 +1,19 @@
 name: Dart CI
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
 jobs:
   test:
+    name: Check Quality (Format, Analyze, Test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
-      - run: dart --version
+        with:
+          sdk: stable
       - run: dart pub get
       - run: dart format --output=none --set-exit-if-changed .
-      - run: dart analyze
+      - run: dart analyze --fatal-infos
       - run: dart test

@@ -96,7 +96,9 @@ final class LatestOnlyBuffer<T> implements ChannelBuffer<T> {
     _last = null;
     _has = false;
     while (_notEmptyWaiters.isNotEmpty) {
-      _notEmptyWaiters.removeFirst().completeError(StateError('Buffer cleared'));
+      _notEmptyWaiters
+          .removeFirst()
+          .completeError(StateError('Buffer cleared'));
     }
   }
 }

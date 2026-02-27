@@ -89,7 +89,8 @@ class _WebPort implements PlatformPort {
         final key = entry.key;
         // Optimization: assume string keys for max speed in "anywhere" context
         // if not string, toString().
-        obj.setProperty(key.toString().toJS, _prepareMessage(entry.value, transferList));
+        obj.setProperty(
+            key.toString().toJS, _prepareMessage(entry.value, transferList));
       }
       return obj;
     }

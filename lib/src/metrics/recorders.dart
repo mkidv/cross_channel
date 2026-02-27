@@ -29,7 +29,10 @@ abstract interface class MetricsRecorder {
 
 @pragma('vm:prefer-inline')
 MetricsRecorder buildMetricsRecorder(String? channelId) {
-  if (!kMetrics || !MetricsConfig.enabled || channelId == null || channelId.isEmpty) {
+  if (!kMetrics ||
+      !MetricsConfig.enabled ||
+      channelId == null ||
+      channelId.isEmpty) {
     return const NoopMetricsRecorder();
   }
   final m = MetricsRegistry().attach(channelId);

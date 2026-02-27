@@ -225,7 +225,8 @@ final class XChannel {
   /// - [XChannel.mpsc] for multi-value streaming
   /// - [Notify] for payload-free signaling
   /// - [OneShot.channel] for low-level api
-  static OneShotChannel<T> oneshot<T>({bool consumeOnce = false, String? metricsId}) {
+  static OneShotChannel<T> oneshot<T>(
+      {bool consumeOnce = false, String? metricsId}) {
     return OneShot.channel<T>(consumeOnce: consumeOnce, metricsId: metricsId);
   }
 
@@ -302,7 +303,8 @@ final class XChannel {
   /// **See also:**
   /// - [XChannel.mpmcLatest] for competitive consumption
   /// - [Mpsc.latest] for low-level api
-  static MpscChannel<T> mpscLatest<T>({String? metricsId}) => Mpsc.latest<T>(metricsId: metricsId);
+  static MpscChannel<T> mpscLatest<T>({String? metricsId}) =>
+      Mpsc.latest<T>(metricsId: metricsId);
 
   /// Creates a latest-only MPMC channel with competitive consumption.
   ///
@@ -334,7 +336,8 @@ final class XChannel {
   /// **See also:**
   /// - [XChannel.mpscLatest] for single consumer
   /// - [Mpmc.latest] for low-level api
-  static MpmcChannel<T> mpmcLatest<T>({String? metricsId}) => Mpmc.latest<T>(metricsId: metricsId);
+  static MpmcChannel<T> mpmcLatest<T>({String? metricsId}) =>
+      Mpmc.latest<T>(metricsId: metricsId);
 
   /// Creates a Broadcast channel for one-to-many communication.
   ///
@@ -357,7 +360,8 @@ final class XChannel {
   ///
   /// tx.send(Event());
   /// ```
-  static BroadcastChannel<T> broadcast<T>({required int capacity, String? metricsId}) {
+  static BroadcastChannel<T> broadcast<T>(
+      {required int capacity, String? metricsId}) {
     return Broadcast.channel<T>(capacity, metricsId: metricsId);
   }
 }

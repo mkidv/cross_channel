@@ -48,7 +48,8 @@ final class BoundedBuffer<T> implements ChannelBuffer<T> {
   List<T> tryPopMany(int max) {
     if (isEmpty) return const [];
     final count = max < _q.length ? max : _q.length;
-    final out = List<T>.generate(count, (_) => _q.removeFirst(), growable: false);
+    final out =
+        List<T>.generate(count, (_) => _q.removeFirst(), growable: false);
     _wakeWaitersIfSpace();
     return out;
   }

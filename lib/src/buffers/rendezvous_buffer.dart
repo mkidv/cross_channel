@@ -93,7 +93,9 @@ final class RendezvousBuffer<T> implements ChannelBuffer<T> {
   @override
   void clear() {
     while (_notEmptyWaiters.isNotEmpty) {
-      _notEmptyWaiters.removeFirst().completeError(StateError('Buffer cleared'));
+      _notEmptyWaiters
+          .removeFirst()
+          .completeError(StateError('Buffer cleared'));
     }
   }
 }

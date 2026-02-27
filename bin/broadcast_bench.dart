@@ -23,14 +23,16 @@ Future<void> main(List<String> args) async {
   await runBroadcastBench('broadcast pipeline (1P/8C)', iters: iters, subs: 8);
 
   // Cross-Isolate
-  final (tx, b) = Broadcast.channel<int>(65536, metricsId: 'broadcast cross-isolate (IsoA→IsoB)');
+  final (tx, b) = Broadcast.channel<int>(65536,
+      metricsId: 'broadcast cross-isolate (IsoA→IsoB)');
   await benchCrossIsolatePipeline((tx, b.subscribe()), iters);
 
   MetricsRegistry().export();
   exit(0);
 }
 
-Future<void> runBroadcastBench(String name, {required int iters, required int subs}) async {
+Future<void> runBroadcastBench(String name,
+    {required int iters, required int subs}) async {
   final (tx, broadcast) = Broadcast.channel<int>(1024, metricsId: name);
   final receivers = List.generate(subs, (_) => broadcast.subscribe());
 

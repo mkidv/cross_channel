@@ -47,7 +47,8 @@ void main() {
       handshake.close();
 
       final statusPort = ReceivePort();
-      final (_, statusRx) = statusPort.toMpsc<Map<String, dynamic>>(capacity: 64);
+      final (_, statusRx) =
+          statusPort.toMpsc<Map<String, dynamic>>(capacity: 64);
 
       cmd.sendCmd('init', data: {'status': statusPort.sendPort});
 
@@ -64,7 +65,8 @@ void main() {
 
       // Collect briefly using recvAll with a small idle window (no subscription juggling)
       cmd.sendCmd('burst', data: {'n': 2000});
-      final seen = await statusRx.recvAll(idle: const Duration(milliseconds: 1));
+      final seen =
+          await statusRx.recvAll(idle: const Duration(milliseconds: 1));
       // we should have at least one tick, but not necessarily 2000 (cap/drops)
       expect(seen.any((e) => e['type'] == 'tick'), isTrue);
 
@@ -106,14 +108,16 @@ void main() {
         handshake.close();
 
         final statusPort = ReceivePort();
-        final (mpmcTx, mpmcRx0) = statusPort.toMpmc<Map<String, dynamic>>(capacity: 64);
+        final (mpmcTx, mpmcRx0) =
+            statusPort.toMpmc<Map<String, dynamic>>(capacity: 64);
         // clone two more local consumers
         final mpmcRx1 = mpmcRx0.clone();
         final mpmcRx2 = mpmcRx0.clone();
 
         // init
         cmd.sendCmd('init', data: {'status': statusPort.sendPort});
-        final first = (await mpmcRx0.recvTimeout(const Duration(seconds: 1))).valueOrNull;
+        final first =
+            (await mpmcRx0.recvTimeout(const Duration(seconds: 1))).valueOrNull;
         expect(first?['type'], 'log');
 
         // start three workers sharing the same queue

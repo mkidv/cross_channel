@@ -53,7 +53,8 @@ void main() {
       tx.close();
     });
 
-    test('Replay clamps to capacity if requested more than available', () async {
+    test('Replay clamps to capacity if requested more than available',
+        () async {
       final (tx, broadcast) = Broadcast.channel<int>(4); // Cap 4
 
       // Fill with 0..9.

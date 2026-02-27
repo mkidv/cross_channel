@@ -106,8 +106,9 @@ final class ChunkedBuffer<T> implements ChannelBuffer<T> {
       final int threshold = _divPowOrInt(capacity, rebalanceThresholdDiv);
 
       if (fill <= threshold) {
-        final int maxMove =
-            (rebalanceBatch <= 16 && capacity <= 2048) ? rebalanceBatch : (rebalanceBatch >> 1);
+        final int maxMove = (rebalanceBatch <= 16 && capacity <= 2048)
+            ? rebalanceBatch
+            : (rebalanceBatch >> 1);
         var moved = 0;
         while (moved < maxMove && !_ringFull && _ov.isNotEmpty) {
           final c = _ov.first;

@@ -1,6 +1,7 @@
 import 'package:cross_channel/src/metrics/p2.dart';
 
-const bool kMetrics = bool.fromEnvironment('CROSS_CHANNEL_METRICS', defaultValue: true);
+const bool kMetrics =
+    bool.fromEnvironment('CROSS_CHANNEL_METRICS', defaultValue: true);
 
 final class ChannelMetrics {
   int sent = 0, recv = 0, dropped = 0, closed = 0;
@@ -127,15 +128,19 @@ final class ChannelSnapshot {
     return sent / (dt / 1e9);
   }
 
-  double? get sendAvgLatency => sent == 0 ? null : (sendLastNs - sendFirstNs) / sent;
+  double? get sendAvgLatency =>
+      sent == 0 ? null : (sendLastNs - sendFirstNs) / sent;
 
-  double? get recvAvgLatency => recv == 0 ? null : (recvLastNs - recvFirstNs) / recv;
+  double? get recvAvgLatency =>
+      recv == 0 ? null : (recvLastNs - recvFirstNs) / recv;
 
-  double get trySendFailureRate =>
-      trySendOk + trySendFail == 0 ? 0 : trySendFail / (trySendOk + trySendFail);
+  double get trySendFailureRate => trySendOk + trySendFail == 0
+      ? 0
+      : trySendFail / (trySendOk + trySendFail);
 
-  double get tryRecvEmptyRate =>
-      tryRecvOk + tryRecvEmpty == 0 ? 0 : tryRecvEmpty / (tryRecvOk + tryRecvEmpty);
+  double get tryRecvEmptyRate => tryRecvOk + tryRecvEmpty == 0
+      ? 0
+      : tryRecvEmpty / (tryRecvOk + tryRecvEmpty);
 
   double get dropRate => sent == 0 ? 0 : dropped / sent;
 }

@@ -29,7 +29,8 @@ Future<void> main(List<String> args) async {
     iters,
   );
 
-  await benchCrossIsolatePipeline(Spsc.channel<int>(1024, metricsId: 'spsc_cross_iso'), iters);
+  await benchCrossIsolatePipeline(
+      Spsc.channel<int>(1024, metricsId: 'spsc_cross_iso'), iters);
 
   MetricsRegistry().export();
   exit(0);

@@ -41,8 +41,8 @@ final class Broadcast<T> {
       allowMultiReceivers: true,
       metricsId: metricsId,
     );
-    final tx =
-        core.attachSender((c) => BroadcastSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core.attachSender(
+        (c) => BroadcastSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
     final broadcast = Broadcast<T>._(buffer, core.id);
     return (tx, broadcast);
   }
@@ -53,8 +53,9 @@ final class Broadcast<T> {
   /// If [replay] > 0, the subscriber attempts to read up to [replay] past messages (if still available).
   BroadcastReceiver<T> subscribe({int replay = 0}) {
     final core = ChannelRegistry.get(_channelId)! as StandardChannelCore<T>;
-    return core.attachReceiver(
-        (c) => BroadcastReceiver<T>._(c.id, c.sendPort, _buffer, replay, metricsId: c.metricsId));
+    return core.attachReceiver((c) => BroadcastReceiver<T>._(
+        c.id, c.sendPort, _buffer, replay,
+        metricsId: c.metricsId));
   }
 }
 
@@ -92,8 +93,10 @@ final class BroadcastSender<T> extends Sender<T> implements KeepAliveSender<T> {
   }
 }
 
-final class BroadcastReceiver<T> extends Receiver<T> implements KeepAliveReceiver<T> {
-  BroadcastReceiver._(this.channelId, this.remotePort, BroadcastRing<T> buffer, int replay,
+final class BroadcastReceiver<T> extends Receiver<T>
+    implements KeepAliveReceiver<T> {
+  BroadcastReceiver._(
+      this.channelId, this.remotePort, BroadcastRing<T> buffer, int replay,
       {this.metricsId}) {
     // Initialize cursor in the buffer.
     // Note: We don't store [buffer] to allow BroadcastReceiver to be sent across Isolates.

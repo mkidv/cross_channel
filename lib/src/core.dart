@@ -183,7 +183,8 @@ abstract class ChannelCore<T, Self extends Object>
 
 /// Standard generic implementation of [ChannelCore].
 ///
-final class StandardChannelCore<T> extends ChannelCore<T, StandardChannelCore<T>> {
+final class StandardChannelCore<T>
+    extends ChannelCore<T, StandardChannelCore<T>> {
   StandardChannelCore(
     this.buf, {
     required this.allowMultiSenders,
@@ -238,7 +239,8 @@ abstract class Sender<T> with ChannelSendOps<T> {
   @override
   FlowControlledRemoteConnection<T>? get remoteConnection {
     if (localSendChannel != null) return null;
-    return _cachedConn ??= _senderConnections[this] as FlowControlledRemoteConnection<T>?;
+    return _cachedConn ??=
+        _senderConnections[this] as FlowControlledRemoteConnection<T>?;
   }
 
   /// Ensures connection is established for remote interactions
@@ -342,7 +344,8 @@ abstract class Receiver<T> with ChannelRecvOps<T> {
 
   /// Closes the remote connection if active.
   void closeRemote() {
-    final conn = _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
+    final conn =
+        _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
     conn?.close();
     _receiverConnections[this] = null;
   }

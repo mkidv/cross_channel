@@ -45,7 +45,8 @@ import 'package:cross_channel/src/result.dart';
 // }
 
 (int iters, bool csv, bool experimental) parseArgs(List<String> args) {
-  final iters = args.isNotEmpty && !args[0].contains('--') ? int.parse(args[0]) : 500_000;
+  final iters =
+      args.isNotEmpty && !args[0].contains('--') ? int.parse(args[0]) : 500_000;
   var csv = false;
   var exp = false;
   for (final a in args) {
@@ -65,7 +66,8 @@ extension IntBytesX on int {
 }
 
 /// ping-pong strict. Round-trip N times.
-Future<void> benchPingPong(Channel<int> chA, Channel<int> chB, int iters) async {
+Future<void> benchPingPong(
+    Channel<int> chA, Channel<int> chB, int iters) async {
   final (txAB, rxAB) = chA;
   final (txBA, rxBA) = chB;
 
@@ -228,7 +230,8 @@ Future<void> benchCrossIsolatePipeline(Channel<int> ch, int iters) async {
 
 /// Cross-Isolate Ping-Pong: Isolate A ↔ Isolate B (round-trip)
 /// Two distinct isolates exchange messages through two channels.
-Future<void> benchCrossIsolatePingPong(Channel<int> chAB, Channel<int> chBA, int iters) async {
+Future<void> benchCrossIsolatePingPong(
+    Channel<int> chAB, Channel<int> chBA, int iters) async {
   final (txAB, rxAB) = chAB;
   final (txBA, rxBA) = chBA;
 

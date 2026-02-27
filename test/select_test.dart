@@ -19,7 +19,8 @@ void main() {
       }));
 
       final tickStream =
-          Stream.periodic(const Duration(milliseconds: 5), (_) => 'tick').asBroadcastStream();
+          Stream.periodic(const Duration(milliseconds: 5), (_) => 'tick')
+              .asBroadcastStream();
 
       var tickCount = 0;
       var msgCount = 0;
@@ -40,20 +41,23 @@ void main() {
       expect(tickCount, greaterThan(0));
     });
 
-    test('recv message is not lost when a competing branch wins (cancel safe)', () async {
+    test('recv message is not lost when a competing branch wins (cancel safe)',
+        () async {
       final (tx, rx) = XChannel.mpsc<int>(capacity: 1);
       final stop = Completer<void>();
 
       unawaited(Future<void>.delayed(const Duration(milliseconds: 5), () {
         if (!stop.isCompleted) stop.complete();
       }));
-      unawaited(Future<void>.delayed(const Duration(milliseconds: 10), () async {
+      unawaited(
+          Future<void>.delayed(const Duration(milliseconds: 10), () async {
         await tx.send(42);
         tx.close();
       }));
 
       final broke = await XSelect.run<bool>((s) => s
-        ..onRecvValue<int>(rx, (msg) async => false, onError: (e) async => true, tag: 'rx')
+        ..onRecvValue<int>(rx, (msg) async => false,
+            onError: (e) async => true, tag: 'rx')
         ..onFuture<void>(stop.future, (_) async => true, tag: 'stop'));
 
       expect(broke, isTrue);
@@ -69,13 +73,14 @@ void main() {
 
   group('XSelect.syncRun', () {
     test('returns null when no immediate branch exists', () {
-      final hit =
-          XSelect.syncRun<bool>((s) => s.onTick(const Duration(milliseconds: 50), () => true));
+      final hit = XSelect.syncRun<bool>(
+          (s) => s.onTick(const Duration(milliseconds: 50), () => true));
       expect(hit, isNull);
     });
 
     test('returns value when tick is immediate (Duration.zero)', () {
-      final hit = XSelect.syncRun<bool>((s) => s.onTick(Duration.zero, () => true));
+      final hit =
+          XSelect.syncRun<bool>((s) => s.onTick(Duration.zero, () => true));
       expect(hit, isTrue);
     });
 
@@ -101,7 +106,8 @@ void main() {
       final out = await XSelect.run<String>((s) => s
         ..onStream<int>(controller.stream, (_) => 'stream') // sera perdant
         ..onFuture<String>(
-          Future<String>.delayed(const Duration(milliseconds: 1), () => 'future'),
+          Future<String>.delayed(
+              const Duration(milliseconds: 1), () => 'future'),
           (v) => v,
         ));
 
@@ -118,11 +124,14 @@ void main() {
     test('first future to resolve wins', () async {
       final winner = await XSelect.race<String>([
         (b) => b.onFuture<String>(
-            Future<String>.delayed(const Duration(milliseconds: 30), () => 'A'), (v) => v),
+            Future<String>.delayed(const Duration(milliseconds: 30), () => 'A'),
+            (v) => v),
         (b) => b.onFuture<String>(
-            Future<String>.delayed(const Duration(milliseconds: 20), () => 'B'), (v) => v),
+            Future<String>.delayed(const Duration(milliseconds: 20), () => 'B'),
+            (v) => v),
         (b) => b.onFuture<String>(
-            Future<String>.delayed(const Duration(milliseconds: 10), () => 'C'), (v) => v),
+            Future<String>.delayed(const Duration(milliseconds: 10), () => 'C'),
+            (v) => v),
       ]);
       expect(winner, equals('C'));
     });
@@ -131,9 +140,13 @@ void main() {
       final winner = await XSelect.race<String>([
         (b) => b
           ..onFuture<String>(
-              Future<String>.delayed(const Duration(milliseconds: 50), () => 'A'), (v) => v)
+              Future<String>.delayed(
+                  const Duration(milliseconds: 50), () => 'A'),
+              (v) => v)
           ..onFuture<String>(
-              Future<String>.delayed(const Duration(milliseconds: 60), () => 'B'), (v) => v),
+              Future<String>.delayed(
+                  const Duration(milliseconds: 60), () => 'B'),
+              (v) => v),
         (b) => b.onTimeout(const Duration(milliseconds: 10), () => 'timeout'),
       ]);
       expect(winner, equals('timeout'));
@@ -141,19 +154,23 @@ void main() {
 
     test('mixed (recv+future+stream) — the fastest future wins', () async {
       final (tx, rx) = XChannel.mpsc<int>(capacity: 4);
-      unawaited(Future<void>.delayed(const Duration(milliseconds: 20), () async {
+      unawaited(
+          Future<void>.delayed(const Duration(milliseconds: 20), () async {
         await tx.send(1);
         tx.close();
       }));
 
       final stream =
-          Stream<int>.periodic(const Duration(milliseconds: 25), (i) => i).asBroadcastStream();
+          Stream<int>.periodic(const Duration(milliseconds: 25), (i) => i)
+              .asBroadcastStream();
 
       final out = await XSelect.race<String>([
         (b) => b.onRecvValue<int>(rx, (v) => 'rx:$v', onError: (e) => 'disc'),
         (b) => b.onStream<int>(stream, (v) => 'st:$v'),
         (b) => b.onFuture<String>(
-            Future<String>.delayed(const Duration(milliseconds: 5), () => 'fast'), (v) => v),
+            Future<String>.delayed(
+                const Duration(milliseconds: 5), () => 'fast'),
+            (v) => v),
       ]);
 
       expect(out, equals('fast'));
@@ -168,9 +185,11 @@ void main() {
     test('future vs future — earliest wins', () async {
       final out = await XSelect.race<String>([
         (b) => b.onFuture<String>(
-            Future<String>.delayed(const Duration(milliseconds: 8), () => 'A'), (v) => v),
+            Future<String>.delayed(const Duration(milliseconds: 8), () => 'A'),
+            (v) => v),
         (b) => b.onFuture<String>(
-            Future<String>.delayed(const Duration(milliseconds: 15), () => 'B'), (v) => v),
+            Future<String>.delayed(const Duration(milliseconds: 15), () => 'B'),
+            (v) => v),
       ]);
       expect(out, equals('A'));
     });
@@ -209,7 +228,9 @@ void main() {
       final out = XSelect.syncRace<String>([
         (b) => b.onTick(Duration.zero, () => 'tick'),
         (b) => b.onFuture<String>(
-            Future<String>.delayed(const Duration(milliseconds: 10), () => 'late'), (v) => v),
+            Future<String>.delayed(
+                const Duration(milliseconds: 10), () => 'late'),
+            (v) => v),
       ]);
       expect(out, equals('tick'));
     });
@@ -226,9 +247,11 @@ void main() {
     test('onNotify fires and returns value when triggered', () async {
       final sig = Notify();
 
-      unawaited(Future<void>.delayed(const Duration(milliseconds: 5), sig.notifyOne));
+      unawaited(
+          Future<void>.delayed(const Duration(milliseconds: 5), sig.notifyOne));
 
-      final out = await XSelect.run<String>((s) => s..onNotify(sig, () => 'fired', tag: 'n'));
+      final out = await XSelect.run<String>(
+          (s) => s..onNotify(sig, () => 'fired', tag: 'n'));
 
       expect(out, equals('fired'));
     });
@@ -236,7 +259,8 @@ void main() {
     test('onNotify is canceled cleanly if another arm wins', () async {
       final sig = Notify();
 
-      unawaited(Future<void>.delayed(const Duration(milliseconds: 10), sig.notifyAll));
+      unawaited(Future<void>.delayed(
+          const Duration(milliseconds: 10), sig.notifyAll));
 
       final out = await XSelect.run<String>((s) => s
         ..onNotify(sig, () => 'notify', tag: 'n')
@@ -257,20 +281,22 @@ void main() {
     test('onNotifyOnce: gate one-shot handling across a user loop', () async {
       final sig = Notify();
 
-      unawaited(Future<void>.delayed(const Duration(milliseconds: 2), sig.notifyAll));
-      unawaited(Future<void>.delayed(const Duration(milliseconds: 5), sig.notifyAll));
+      unawaited(
+          Future<void>.delayed(const Duration(milliseconds: 2), sig.notifyAll));
+      unawaited(
+          Future<void>.delayed(const Duration(milliseconds: 5), sig.notifyAll));
 
       var handledOnce = false;
       var running = true;
 
       while (running) {
         final broke = await XSelect.run<bool>((s) => s
-              ..onNotify(sig, () {
-                handledOnce = true;
-                return false;
-              }, if_: () => !handledOnce, tag: 'notify-once')
-              ..onDelay(const Duration(milliseconds: 10), () => true, tag: 'idle'))
-            .timeout(const Duration(milliseconds: 15));
+          ..onNotify(sig, () {
+            handledOnce = true;
+            return false;
+          }, if_: () => !handledOnce, tag: 'notify-once')
+          ..onDelay(const Duration(milliseconds: 10), () => true,
+              tag: 'idle')).timeout(const Duration(milliseconds: 15));
 
         if (broke == true) running = false;
       }

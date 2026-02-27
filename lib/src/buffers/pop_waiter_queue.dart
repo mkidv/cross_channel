@@ -102,7 +102,9 @@ final class PopWaiterQueue<T> {
   void clear() {
     _fastWaiter = null;
     while (_notEmptyWaiters.isNotEmpty) {
-      _notEmptyWaiters.removeFirst().completeError(StateError('Buffer cleared'));
+      _notEmptyWaiters
+          .removeFirst()
+          .completeError(StateError('Buffer cleared'));
     }
   }
 }

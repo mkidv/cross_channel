@@ -126,7 +126,9 @@ final class PromiseBuffer<T> implements ChannelBuffer<T> {
     _has = false;
     _consumed = false;
     while (_notEmptyWaiters.isNotEmpty) {
-      _notEmptyWaiters.removeFirst().completeError(StateError('Buffer cleared'));
+      _notEmptyWaiters
+          .removeFirst()
+          .completeError(StateError('Buffer cleared'));
     }
   }
 }
