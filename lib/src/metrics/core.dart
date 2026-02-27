@@ -1,7 +1,6 @@
 import 'package:cross_channel/src/metrics/p2.dart';
 
-const bool kMetrics =
-    bool.fromEnvironment('CROSS_CHANNEL_METRICS', defaultValue: true);
+const bool kMetrics = bool.fromEnvironment('CROSS_CHANNEL_METRICS', defaultValue: true);
 
 final class ChannelMetrics {
   int sent = 0, recv = 0, dropped = 0, closed = 0;
@@ -67,6 +66,45 @@ final class ChannelSnapshot {
     this.sendLastNs = 0,
   });
 
+  ChannelSnapshot merge(ChannelSnapshot other) {
+    return ChannelSnapshot(
+      sent: sent + other.sent,
+      recv: recv + other.recv,
+      dropped: dropped + other.dropped,
+      closed: closed + other.closed,
+      trySendOk: trySendOk + other.trySendOk,
+      trySendFail: trySendFail + other.trySendFail,
+      tryRecvOk: tryRecvOk + other.tryRecvOk,
+      tryRecvEmpty: tryRecvEmpty + other.tryRecvEmpty,
+      sendP50: _pick(sendP50, other.sendP50),
+      sendP95: _pick(sendP95, other.sendP95),
+      sendP99: _pick(sendP99, other.sendP99),
+      recvP50: _pick(recvP50, other.recvP50),
+      recvP95: _pick(recvP95, other.recvP95),
+      recvP99: _pick(recvP99, other.recvP99),
+      recvFirstNs: _min(recvFirstNs, other.recvFirstNs),
+      recvLastNs: _max(recvLastNs, other.recvLastNs),
+      sendFirstNs: _min(sendFirstNs, other.sendFirstNs),
+      sendLastNs: _max(sendLastNs, other.sendLastNs),
+    );
+  }
+
+  static double? _pick(double? a, double? b) {
+    if (a == null || a == 0) return b;
+    if (b == null || b == 0) return a;
+    return (a + b) / 2; // Simple average if both have data
+  }
+
+  static int _min(int a, int b) {
+    if (a == 0) return b;
+    if (b == 0) return a;
+    return a < b ? a : b;
+  }
+
+  static int _max(int a, int b) {
+    return a > b ? a : b;
+  }
+
   Duration get duration => Duration(
         microseconds: ((recvLastNs - recvFirstNs) / 1000).round(),
       );
@@ -89,19 +127,15 @@ final class ChannelSnapshot {
     return sent / (dt / 1e9);
   }
 
-  double? get sendAvgLatency =>
-      sent == 0 ? null : (sendLastNs - sendFirstNs) / sent;
+  double? get sendAvgLatency => sent == 0 ? null : (sendLastNs - sendFirstNs) / sent;
 
-  double? get recvAvgLatency =>
-      recv == 0 ? null : (recvLastNs - recvFirstNs) / recv;
+  double? get recvAvgLatency => recv == 0 ? null : (recvLastNs - recvFirstNs) / recv;
 
-  double get trySendFailureRate => trySendOk + trySendFail == 0
-      ? 0
-      : trySendFail / (trySendOk + trySendFail);
+  double get trySendFailureRate =>
+      trySendOk + trySendFail == 0 ? 0 : trySendFail / (trySendOk + trySendFail);
 
-  double get tryRecvEmptyRate => tryRecvOk + tryRecvEmpty == 0
-      ? 0
-      : tryRecvEmpty / (tryRecvOk + tryRecvEmpty);
+  double get tryRecvEmptyRate =>
+      tryRecvOk + tryRecvEmpty == 0 ? 0 : tryRecvEmpty / (tryRecvOk + tryRecvEmpty);
 
   double get dropRate => sent == 0 ? 0 : dropped / sent;
 }
@@ -111,6 +145,19 @@ final class GlobalMetrics {
   final Map<String, ChannelSnapshot> channels;
 
   const GlobalMetrics(this.ts, this.channels);
+
+  GlobalMetrics merge(GlobalMetrics other) {
+    final mergedChannels = Map<String, ChannelSnapshot>.from(channels);
+    other.channels.forEach((id, snap) {
+      final existing = mergedChannels[id];
+      if (existing == null) {
+        mergedChannels[id] = snap;
+      } else {
+        mergedChannels[id] = existing.merge(snap);
+      }
+    });
+    return GlobalMetrics(ts, mergedChannels);
+  }
 
   int get sent => channels.values.fold(0, (a, v) => a + v.sent);
   int get recv => channels.values.fold(0, (a, v) => a + v.recv);

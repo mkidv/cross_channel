@@ -82,7 +82,7 @@ extension StreamReceiverX<T> on KeepAliveReceiver<T> {
         (v) => ctrl.add(v),
         onError: ctrl.addError,
         onDone: () async {
-          if (closeReceiverOnDone && !isDisconnected) close();
+          if (closeReceiverOnDone && !recvDisconnected) close();
           await ctrl.close();
         },
         cancelOnError: false,
@@ -122,6 +122,8 @@ extension StreamReceiverX<T> on KeepAliveReceiver<T> {
 
     return ctrl.stream;
   }
+
+  Stream<R> mapBroadcast<R>(R Function(T) f) => toBroadcastStream().map(f);
 }
 
 /// Bridge from Dart Streams to channel senders.
@@ -199,7 +201,7 @@ extension SenderStreamX<T> on Stream<T> {
         if (r1.isDisconnected) break;
       }
     } finally {
-      if (closeSenderOnDone && !tx.isDisconnected) {
+      if (closeSenderOnDone && !tx.sendDisconnected) {
         tx.close();
       }
     }

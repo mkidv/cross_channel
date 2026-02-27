@@ -21,6 +21,12 @@ final class PolicyBufferWrapper<T> implements ChannelBuffer<T> {
   T? tryPop() => _inner.tryPop();
 
   @override
+  List<T> tryPopMany(int max) => _inner.tryPopMany(max);
+
+  @override
+  Future<void> waitNotEmpty() => _inner.waitNotEmpty();
+
+  @override
   Future<void> waitNotFull() => _inner.waitNotFull();
 
   @override

@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'package:test/test.dart';
-import 'package:cross_channel/mpsc.dart';
+
 import 'package:cross_channel/mpmc.dart';
+import 'package:cross_channel/mpsc.dart';
+import 'package:test/test.dart';
 
 import 'utils.dart';
 

@@ -19,12 +19,10 @@ mixin ChannelLifecycle<T, Self extends Object> {
   bool _closedReceivers = false;
 
   @pragma('vm:prefer-inline')
-  bool get sendDisconnected =>
-      _closedSenders || (_closedReceivers && _activeReceivers == 0);
+  bool get sendDisconnected => _closedSenders || (_closedReceivers && _activeReceivers == 0);
 
   @pragma('vm:prefer-inline')
-  bool get recvDisconnected =>
-      _closedReceivers || (_closedSenders && buf.isEmpty);
+  bool get recvDisconnected => _closedReceivers || (_closedSenders && buf.isEmpty);
 
   @pragma('vm:prefer-inline')
   S attachSender<S>(S Function(Self) make) {

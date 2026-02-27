@@ -15,8 +15,9 @@
 
 # cross_channel
 
-Fast & flexible channels for Dart/Flutter.  
-Rust-style concurrency primitives: **MPSC, MPMC, SPSC, OneShot**, plus **drop policies**, **latest-only**, **select**, stream/isolate/web adapters.
+Fast & flexible channels for Dart/Flutter.
+Rust-style concurrency primitives: **MPSC, MPMC, SPSC, OneShot**.
+Features: **Universal Handles** (transparent local optimization), **Drop policies**, **Latest-only**, **Select**, and robust **Isolate/Web adapters**.
 
 <p align="center">
   <b>Bench-tested</b> · <code>~1.6–1.9 Mops/s</code>
@@ -26,6 +27,8 @@ Rust-style concurrency primitives: **MPSC, MPMC, SPSC, OneShot**, plus **drop po
 
 - **Drop policies**: `block`, `oldest`, `newest`
 - **LatestOnly** buffers (coalesce to last)
+- **Broadcast Ring** (Single-Producer Multi-Consumer) with lag detection & replay
+- **Sender Rate Limiting**: `throttle` and `debounce` at the source
 - **Select** over Futures, Streams, Receivers & Timers
 - **Backpressure** with bounded queues; **rendezvous** (`capacity=0`)
 - **Notify** primitive (lightweight wakeups: `notifyOne`, `notifyAll`, `notified`)
@@ -50,6 +53,7 @@ final (tx, rx) = XChannel.mpscLatest<T>(); // MPSC latest-only
 final (tx, rx) = XChannel.mpmcLatest<T>(); // MPMC latest-only (competitive)
 final (tx, rx) = XChannel.spsc<int>(capacity: 1024); // pow2 rounded internally
 final (tx, rx) = XChannel.oneshot<T>(consumeOnce: false);
+final (tx, broadcast) = XChannel.broadcast<T>(capacity: 1024);
 ```
 
 ### Low-Level
@@ -76,6 +80,9 @@ final (tx, rx) = Spsc.channel<T>(1024); // pow2 rounded internally
 
 import 'package:cross_channel/oneshot.dart';
 final (tx, rx) = OneShot.channel<T>(consumeOnce: false);
+
+import 'package:cross_channel/broadcast.dart';
+final (tx, broadcast) = Broadcast.channel<T>(1024);
 ```
 
 ### Note
@@ -95,6 +102,7 @@ final (tx, rx) = OneShot.channel<T>(consumeOnce: false);
 | **SPSC**       | single    | single                             | Ultra-low-latency hot path         | Lock-free ring (pow2 capacity)     |
 | **OneShot**    | 1         | 1 (or many)                        | Request/response, once-only signal | `consumeOnce` option               |
 | **LatestOnly** | multi     | single (MPSC) / competitive (MPMC) | Progress, sensors, UI signals      | Always coalesces to last value     |
+| **Broadcast**  | single    | multi (all see all)                | Event bus, monitoring, telemetry   | Ring buffer with lag detection     |
 
 ### When to use Notify vs channels
 
@@ -204,6 +212,42 @@ final (stx, srx) = XChannel.oneshot<String>(consumeOnce: true);
 
 // consumeOnce = false: every receiver sees the same value (until higher-level teardown)
 final (btx, brx) = XChannel.oneshot<String>(consumeOnce: false);
+```
+
+### Broadcast (Pub/Sub with Ring)
+
+```dart
+final (tx, broadcast) = XChannel.broadcast<int>(capacity: 16);
+
+// Subscriber 1 (starts from now)
+final sub1 = broadcast.subscribe();
+
+// Subscriber 2 (replays last 5 items)
+final sub2 = broadcast.subscribe(replay: 5);
+
+await tx.send(42);
+
+// Both receive 42
+final val1 = await sub1.recv();
+final val2 = await sub2.recv();
+```
+
+### Rate Limiting (Sender-side)
+
+Crucial for avoiding cross-isolate overhead on high-frequency events.
+
+```dart
+final (tx, rx) = XChannel.mpsc<double>();
+
+// Only send at most 1 item every 100ms
+final throttled = tx.throttle(const Duration(milliseconds: 100));
+
+// Wait for silence (100ms) before sending last value
+final debounced = tx.debounce(const Duration(milliseconds: 100));
+
+// Usage:
+onSliderChanged(val) => throttled.send(val);
+onSearchQuery(text) => debounced.send(text);
 ```
 
 ## 🔔 Notify (lightweight wakeups)
@@ -397,7 +441,6 @@ final res = await channel.port1.request<String>('ping');
 
 // Port → channel bridge
 final (tx, rx) = channel.port2.toMpmc<JsEvent>(capacity: 512, strict: true);
-
 ```
 
 ## 🧩 Results & helpers
@@ -487,11 +530,19 @@ cancel(); // attempts to abort the wait if still pending
 | oneshot send+receive |          2.75 |        363.6 |           1.7 |
 | oneshot pipeline     |          2.80 |        356.9 |           4.3 |
 
+### BROADCAST (SPMC Ring)
+
+| case                          | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
+| ----------------------------- | ------------: | -----------: | ------------: |
+| broadcast pipeline (1P/1C)    |          0.56 |       1792.6 |         306.9 |
+| broadcast pipeline (1P/4C)    |          0.93 |       1080.8 |         156.6 |
+| broadcast pipeline (1P/8C)    |          0.91 |       1098.9 |         247.6 |
+
 ### How to bench
 
 This repo ships with two PowerShell scripts to run the micro-benchmarks. They produce consistent, copy-pastable output and (optionally) a CSV for later analysis.
 
-> Windows or PowerShell Core (`pwsh`) on macOS/Linux is fine.  
+> Windows or PowerShell Core (`pwsh`) on macOS/Linux is fine.
 > For non-PowerShell usage, see the manual commands at the end.
 
 #### **Lite** — fast dev loop
@@ -541,7 +592,7 @@ Stability tips: pin CPU with -Affinity, raise -Priority High, do a warm-up repea
 
 #### Benchmark CSV Format
 
-> **Note:** Benchmarks use the same metrics CSV format shown in the [Metrics section](#-metrics-advanced).  
+> **Note:** Benchmarks use the same metrics CSV format shown in the [Metrics section](#-metrics-advanced).
 > When you run benchmarks with `--csv`, they output detailed metrics for each test case.
 
 The benchmark scripts automatically enable metrics collection and use `StdExporter` or `CsvExporter` to output comprehensive performance data including operation counts, latency percentiles, and throughput measurements.
@@ -609,7 +660,7 @@ ts,type,id,sent,recv,dropped,closed,trySendOk,trySendFail,tryRecvOk,tryRecvEmpty
 - `sent`, `recv` - Total blocking operation counts
 - `dropped`, `closed` - Loss and lifecycle events
 
-**Non-blocking Operations:**  
+**Non-blocking Operations:**
 - `trySendOk`, `trySendFail` - Non-blocking send results
 - `tryRecvOk`, `tryRecvEmpty` - Non-blocking receive results
 

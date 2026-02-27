@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
+
 import 'package:cross_channel/oneshot.dart';
 import 'package:cross_channel/src/metrics.dart';
+
 import 'utils.dart';
 
 Future<void> main(List<String> args) async {
@@ -21,7 +24,11 @@ Future<void> main(List<String> args) async {
 
   await benchPipeline(OneShot.channel<int>(metricsId: 'pipeline'), iters);
 
+  await benchCrossIsolatePipeline(
+      OneShot.channel<int>(metricsId: 'cross-isolate pipeline (IsoA→IsoB)'), iters);
+
   MetricsRegistry().export();
+  exit(0);
 }
 
 Future<void> _benchSendRecvSamePair(int iters, String label) async {

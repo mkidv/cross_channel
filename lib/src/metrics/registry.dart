@@ -7,8 +7,14 @@ class MetricsRegistry {
   factory MetricsRegistry() => _i;
 
   final Map<String, ChannelMetrics> _map = {};
+  final List<GlobalMetrics> _externals = [];
 
   ChannelMetrics attach(String id) => _map[id] ??= ChannelMetrics();
+
+  void merge(GlobalMetrics other) {
+    if (!kMetrics || !MetricsConfig.enabled) return;
+    _externals.add(other);
+  }
 
   GlobalMetrics snapshot() {
     final snaps = <String, ChannelSnapshot>{};
@@ -34,7 +40,12 @@ class MetricsRegistry {
         sendLastNs: m.sendLastNs,
       );
     });
-    return GlobalMetrics(DateTime.now(), snaps);
+
+    var snap = GlobalMetrics(DateTime.now(), snaps);
+    for (final ext in _externals) {
+      snap = snap.merge(ext);
+    }
+    return snap;
   }
 
   void export() {

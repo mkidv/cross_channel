@@ -6,11 +6,41 @@
 
 ### Planned
 
-- **Broadcast ring (pub-sub)** with per-subscriber cursors and lag detection.
-- **Watch / State channel**: latest-only with optional `replay(1)` for late subscribers.
-- **Cancellation scopes & tokens** integrated with `Select`.
-- **Rate-limiting adapters** on senders/receivers: `throttle`, `debounce`, `window`.
+- **Cross-Isolate Event Bus** (future optimization of Broadcast)
 
+---
+
+## [0.9.0] – 2026-01-24
+
+### Added
+- **Broadcast Channel** (`XChannel.broadcast`):
+  - Single-Producer Multi-Consumer (SPMC) Ring Buffer.
+  - **Pub/Sub semantics**: All subscribers receive all messages.
+  - **Lag Detection**: Slow subscribers detect gaps (skip) instead of blocking producer.
+  - **History Replay**: `subscribe(replay: N)` to catch up on past events.
+- **Sender Rate Limiting**:
+  - `sender.throttle(duration)`: Limit event rate (drops excess).
+  - `sender.debounce(duration)`: Stabilize bursty events (sends only last after silence).
+- **Universal Handles** (`ChannelRegistry`):
+  - **Zero-overhead local fallback**: Channels check their locality (intra-isolate) before serializing.
+  - O(1) lookup enables passing "remote" handles that transparently optimize to direct buffer access if local.
+- **Unified Remote Protocol**:
+  - `RemoteConnection<T>` and `FlowControlledRemoteConnection<T>` for structured cross-context communication.
+  - Credit-based flow control protocol to prevent OOM on slow receivers.
+- **Platform Agnostic Channels** (`lib/src/platform/`):
+  - Unified internal abstraction `PlatformPort` / `PlatformReceiver`.
+  - Modern `package:web` implementation for future-proof Web support.
+
+### Changed
+
+- **Performance**:
+  - **Single-waiter optimization**: `PopWaiterQueue` uses a field instead of a queue for the common 1-waiter case (recv path).
+  - **Fast-path routing**: `ChannelOps` automatically routes to local channel if available.
+
+### Fixed
+
+- **Metrics**:
+  - Improved `ActiveMetricsRecorder` timestamp sampling accuracy (`_nowNs`).
 
 ---
 

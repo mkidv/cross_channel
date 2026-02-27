@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'package:test/test.dart';
+
 import 'package:cross_channel/mpmc.dart';
+import 'package:test/test.dart';
 
 import 'utils.dart';
 
@@ -158,7 +159,7 @@ void main() {
     test('sender.clone() after all receivers dropped -> StateError', () async {
       final (tx, rx) = Mpmc.unbounded<int>();
       rx.close();
-      expect(() => tx.clone(), throwsA(isA<StateError>()));
+      expect(tx.clone, throwsA(isA<StateError>()));
     });
   });
 

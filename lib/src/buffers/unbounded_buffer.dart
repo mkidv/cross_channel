@@ -2,13 +2,11 @@ part of '../buffers.dart';
 
 /// Unbounded FIFO queue
 /// producers never block
-///
 final class UnboundedBuffer<T> implements ChannelBuffer<T> {
   UnboundedBuffer();
 
   final _q = ListQueue<T>();
-  final _popWaiters = ListQueue<Completer<T>>();
-  Completer<T>? _fastWaiter;
+  final _waiters = PopWaiterQueue<T>();
 
   @pragma('vm:prefer-inline')
   @override
@@ -17,19 +15,12 @@ final class UnboundedBuffer<T> implements ChannelBuffer<T> {
   @pragma('vm:prefer-inline')
   @override
   bool tryPush(T v) {
-    if (isEmpty) {
-      final fw = _fastWaiter;
-      if (fw != null) {
-        _fastWaiter = null;
-        fw.complete(v);
-        return true;
-      }
-      if (_popWaiters.isNotEmpty) {
-        _popWaiters.removeFirst().complete(v);
-        return true;
-      }
+    // Fast path: complete waiting receiver directly
+    if (isEmpty && _waiters.completeOne(v)) {
+      return true;
     }
     _q.addLast(v);
+    _waiters.wakeNotEmptyWaiters();
     return true;
   }
 
@@ -41,6 +32,19 @@ final class UnboundedBuffer<T> implements ChannelBuffer<T> {
   }
 
   @override
+  List<T> tryPopMany(int max) {
+    if (isEmpty) return const [];
+    final count = max < _q.length ? max : _q.length;
+    return List<T>.generate(count, (_) => _q.removeFirst(), growable: false);
+  }
+
+  @override
+  Future<void> waitNotEmpty() async {
+    if (!isEmpty) return;
+    await _waiters.addNotEmptyWaiter().future;
+  }
+
+  @override
   Future<void> waitNotFull() async {}
 
   @override
@@ -48,59 +52,21 @@ final class UnboundedBuffer<T> implements ChannelBuffer<T> {
 
   @pragma('vm:prefer-inline')
   @override
-  Completer<T> addPopWaiter() {
-    final c = Completer<T>.sync();
-
-    final v = tryPop();
-    if (v != null) {
-      c.complete(v);
-      return c;
-    }
-
-    if (_fastWaiter == null) {
-      _fastWaiter = c;
-      if (!isEmpty && identical(_fastWaiter, c)) {
-        _fastWaiter = null;
-        final v2 = tryPop();
-        if (v2 != null) {
-          c.complete(v2);
-          return c;
-        }
-        _fastWaiter = c;
-      }
-      return c;
-    }
-
-    _popWaiters.addLast(c);
-    return c;
-  }
+  Completer<T> addPopWaiter() => _waiters.add(tryPop, () => isEmpty);
 
   @pragma('vm:prefer-inline')
   @override
-  bool removePopWaiter(Completer<T> c) {
-    if (identical(_fastWaiter, c)) {
-      _fastWaiter = null;
-      return true;
-    }
-    return _popWaiters.remove(c);
-  }
+  bool removePopWaiter(Completer<T> c) => _waiters.remove(c);
 
   @override
   void wakeAllPushWaiters() {}
 
   @override
-  void failAllPopWaiters(Object e) {
-    final fw = _fastWaiter;
-    _fastWaiter = null;
-    if (fw != null) fw.completeError(e);
-    while (_popWaiters.isNotEmpty) {
-      _popWaiters.removeFirst().completeError(e);
-    }
-  }
+  void failAllPopWaiters(Object e) => _waiters.failAll(e);
 
   @override
   void clear() {
-    _fastWaiter = null;
     _q.clear();
+    _waiters.clear();
   }
 }

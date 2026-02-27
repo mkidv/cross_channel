@@ -1,9 +1,8 @@
 import 'dart:async';
 import 'dart:isolate';
 
-import 'package:cross_channel/mpsc.dart';
 import 'package:cross_channel/mpmc.dart';
-import 'package:cross_channel/src/channel_type.dart';
+import 'package:cross_channel/mpsc.dart';
 
 /// Type-safe isolate communication with request/reply patterns.
 ///
@@ -128,9 +127,8 @@ extension SendPortRequestX on SendPort {
 /// Essential for building robust isolate architectures with proper error
 /// handling and backpressure management.
 extension ReceivePortToChannelX on ReceivePort {
-  /// Convert port messages to MPSC channel (legacy method).
+  /// Convert port messages to MPSC channel.
   ///
-  /// **Deprecated**: Use [toChannel] with `type: ChannelType.mpsc` for new code.
   /// When `strict == true`, the port is closed on unexpected message types.
   ///
   (MpscSender<T>, MpscReceiver<T>) toMpsc<T>({
@@ -159,9 +157,8 @@ extension ReceivePortToChannelX on ReceivePort {
     return (tx, rx);
   }
 
-  /// Convert port messages to MPMC channel (legacy method).
+  /// Convert port messages to MPMC channel.
   ///
-  /// **Deprecated**: Use [toChannel] with `type: ChannelType.mpmc` for new code.
   /// When `strict == true`, the port is closed on unexpected message types.
   ///
   (MpmcSender<T>, MpmcReceiver<T>) toMpmc<T>({
@@ -188,64 +185,5 @@ extension ReceivePortToChannelX on ReceivePort {
       }
     });
     return (tx, rx);
-  }
-
-  /// Convert port messages to a channel with unified API.
-  ///
-  /// Modern, unified approach that replaces [toMpsc] and [toMpmc].
-  /// When `strict == true`, the port is closed on unexpected message types.
-  ///
-  /// **Parameters:**
-  /// - [type]: Channel type (mpsc or mpmc)
-  /// - [capacity]: Buffer size (null = unbounded, 0 = rendezvous)
-  /// - [policy]: Drop policy for bounded channels
-  /// - [onDrop]: Optional callback for dropped items
-  /// - [chunked]: Use optimized chunked buffer
-  /// - [strict]: Close port on type mismatches
-  ///
-  /// **Example:**
-  /// ```dart
-  /// // Worker isolate event processing
-  /// final rp = ReceivePort();
-  /// final (tx, rx) = rp.toChannel<WorkerCommand>(
-  ///   type: ChannelType.mpsc,
-  ///   capacity: 1000,
-  /// );
-  ///
-  /// // Structured command processing
-  /// await for (final cmd in rx.stream()) {
-  ///   switch (cmd.type) {
-  ///     case 'process': await handleProcess(cmd);
-  ///     case 'shutdown': return;
-  ///   }
-  /// }
-  /// ```
-  (dynamic, dynamic) toChannel<T>(
-    ChannelType type, {
-    int? capacity,
-    DropPolicy policy = DropPolicy.block,
-    OnDrop<T>? onDrop,
-    bool chunked = true,
-    bool strict = true,
-    String? metricsId,
-  }) {
-    switch (type) {
-      case ChannelType.mpsc:
-        return toMpsc<T>(
-            capacity: capacity,
-            policy: policy,
-            onDrop: onDrop,
-            chunked: chunked,
-            strict: strict,
-            metricsId: metricsId);
-      case ChannelType.mpmc:
-        return toMpmc<T>(
-            capacity: capacity,
-            policy: policy,
-            onDrop: onDrop,
-            chunked: chunked,
-            strict: strict,
-            metricsId: metricsId);
-    }
   }
 }

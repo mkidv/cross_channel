@@ -62,12 +62,12 @@ Future<void> main() async {
   // - first a single wakeup (config reload)…
   unawaited(Future<void>.delayed(
     const Duration(milliseconds: 120),
-    () => notify.notifyOne(),
+    notify.notifyOne,
   ));
   // - then a broadcast wakeup (e.g., shutdown) that wakes all waiters
   unawaited(Future<void>.delayed(
     const Duration(milliseconds: 240),
-    () => notify.notifyAll(),
+    notify.notifyAll,
   ));
 
   // A second independent waiter to demonstrate notifyAll waking multiple tasks
@@ -165,9 +165,6 @@ Future<void> main() async {
         print('timeout');
         return true;
       }));
-
-    // print(
-    //     "($aliveMpsc || $aliveMpmc0 || $aliveMpmc1 || $aliveSpsc || $aliveLatest)");
     if (shouldBreak) break;
   }
 

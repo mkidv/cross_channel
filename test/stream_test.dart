@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'package:test/test.dart';
+
 import 'package:cross_channel/mpsc.dart';
 import 'package:cross_channel/stream_extension.dart';
+import 'package:test/test.dart';
 
 import 'utils.dart';
 
@@ -17,7 +18,9 @@ void main() {
         final c = <int>[];
 
         final sub1 = b.listen(a.add);
+        addTearDown(sub1.cancel);
         final sub2 = b.listen(c.add);
+        addTearDown(sub2.cancel);
 
         await tx.sendAll(List<int>.generate(10, (i) => i));
         tx.close();
@@ -39,6 +42,7 @@ void main() {
 
         final got = <int>[];
         final sub = b.listen(got.add);
+        addTearDown(sub.cancel);
 
         tx.close();
         await sub.asFuture<void>();
@@ -58,6 +62,7 @@ void main() {
 
         final got = <int>[];
         final sub = b.listen(got.add);
+        addTearDown(sub.cancel);
 
         await tx.sendAll(List<int>.generate(5, (i) => i + 5));
         tx.close();
@@ -80,6 +85,7 @@ void main() {
 
         final got = <int>[];
         var sub = b.listen(got.add);
+        addTearDown(sub.cancel);
 
         await tx.sendAll(List<int>.generate(3, (i) => i));
         await tick();
@@ -89,6 +95,7 @@ void main() {
         await tx.sendAll(List<int>.generate(3, (i) => i + 3));
 
         sub = b.listen(got.add);
+        addTearDown(sub.cancel);
 
         await tx.sendAll(List<int>.generate(3, (i) => i + 6));
         tx.close();
@@ -110,6 +117,7 @@ void main() {
 
         final got = <int>[];
         final sub = b.listen(got.add);
+        addTearDown(sub.cancel);
 
         await tx.sendAll(List<int>.generate(3, (i) => i));
         tx.close();
@@ -117,7 +125,7 @@ void main() {
         await sub.asFuture<void>();
         expect(got, [0, 1, 2]);
 
-        expect(rx.isDisconnected, isTrue);
+        expect(rx.recvDisconnected, isTrue);
       },
     );
 
@@ -181,7 +189,7 @@ void main() {
       }
 
       await src().redirectToSender(tx, closeSenderOnDone: false);
-      expect(tx.isDisconnected, isFalse);
+      expect(tx.sendDisconnected, isFalse);
 
       tx.close();
 

@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'package:test/test.dart';
+
 import 'package:cross_channel/spsc.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('SPSC - channel', () {

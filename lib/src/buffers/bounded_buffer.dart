@@ -2,16 +2,13 @@ part of '../buffers.dart';
 
 /// Bounded FIFO queue
 /// producers block/wait for permits when full
-///
 final class BoundedBuffer<T> implements ChannelBuffer<T> {
   BoundedBuffer({required this.capacity}) : assert(capacity > 0);
 
   final int capacity;
   final ListQueue<T> _q = ListQueue<T>();
-
   final _pushWaiters = ListQueue<Completer<void>>();
-  final _popWaiters = ListQueue<Completer<T>>();
-  Completer<T>? _fastWaiter;
+  final _waiters = PopWaiterQueue<T>();
 
   int _permits = 0;
 
@@ -28,20 +25,13 @@ final class BoundedBuffer<T> implements ChannelBuffer<T> {
   @pragma('vm:prefer-inline')
   @override
   bool tryPush(T v) {
-    if (isEmpty) {
-      final fw = _fastWaiter;
-      if (fw != null) {
-        _fastWaiter = null;
-        fw.complete(v);
-        return true;
-      }
-      if (_popWaiters.isNotEmpty) {
-        _popWaiters.removeFirst().complete(v);
-        return true;
-      }
+    // Fast path: complete waiting receiver directly
+    if (isEmpty && _waiters.completeOne(v)) {
+      return true;
     }
     if (_isFull) return false;
     _q.addLast(v);
+    _waiters.wakeNotEmptyWaiters();
     return true;
   }
 
@@ -50,14 +40,33 @@ final class BoundedBuffer<T> implements ChannelBuffer<T> {
   T? tryPop() {
     if (isEmpty) return null;
     final v = _q.removeFirst();
+    _wakeWaitersIfSpace();
+    return v;
+  }
+
+  @override
+  List<T> tryPopMany(int max) {
+    if (isEmpty) return const [];
+    final count = max < _q.length ? max : _q.length;
+    final out = List<T>.generate(count, (_) => _q.removeFirst(), growable: false);
+    _wakeWaitersIfSpace();
+    return out;
+  }
+
+  @pragma('vm:prefer-inline')
+  void _wakeWaitersIfSpace() {
     if (_pushWaiters.isNotEmpty) {
       while (_free > 0 && _pushWaiters.isNotEmpty) {
         _pushWaiters.removeFirst().complete();
         _permits++;
       }
     }
+  }
 
-    return v;
+  @override
+  Future<void> waitNotEmpty() async {
+    if (!isEmpty) return;
+    await _waiters.addNotEmptyWaiter().future;
   }
 
   @override
@@ -79,47 +88,19 @@ final class BoundedBuffer<T> implements ChannelBuffer<T> {
   @pragma('vm:prefer-inline')
   @override
   Completer<T> addPopWaiter() {
-    final c = Completer<T>.sync();
+    final c = _waiters.add(tryPop, () => isEmpty);
 
-    final v = tryPop();
-    if (v != null) {
-      c.complete(v);
-      return c;
-    }
-
-    if (_fastWaiter == null) {
-      _fastWaiter = c;
-      if (!isEmpty && identical(_fastWaiter, c)) {
-        _fastWaiter = null;
-        final v2 = tryPop();
-        if (v2 != null) {
-          c.complete(v2);
-          return c;
-        }
-        _fastWaiter = c;
-      }
-      return c;
-    }
-    _popWaiters.addLast(c);
-
-    if (_pushWaiters.isNotEmpty) {
-      if (_free > 0) {
-        _pushWaiters.removeFirst().complete();
-        _permits++;
-      }
+    // Wake push waiters if space available
+    if (_pushWaiters.isNotEmpty && _free > 0) {
+      _pushWaiters.removeFirst().complete();
+      _permits++;
     }
     return c;
   }
 
   @pragma('vm:prefer-inline')
   @override
-  bool removePopWaiter(Completer<T> c) {
-    if (identical(_fastWaiter, c)) {
-      _fastWaiter = null;
-      return true;
-    }
-    return _popWaiters.remove(c);
-  }
+  bool removePopWaiter(Completer<T> c) => _waiters.remove(c);
 
   @override
   void wakeAllPushWaiters() {
@@ -129,19 +110,12 @@ final class BoundedBuffer<T> implements ChannelBuffer<T> {
   }
 
   @override
-  void failAllPopWaiters(Object e) {
-    final fw = _fastWaiter;
-    _fastWaiter = null;
-    if (fw != null) fw.completeError(e);
-    while (_popWaiters.isNotEmpty) {
-      _popWaiters.removeFirst().completeError(e);
-    }
-  }
+  void failAllPopWaiters(Object e) => _waiters.failAll(e);
 
   @override
   void clear() {
-    _fastWaiter = null;
     _q.clear();
     _permits = 0;
+    _waiters.clear();
   }
 }

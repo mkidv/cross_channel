@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('spsc', 'mpsc','mpmc','oneshot','all')]
+  [ValidateSet('spsc', 'mpsc','mpmc','oneshot','broadcast','all')]
   [string]$Target = 'all',
   [ValidateSet('compile','run','cr')]
   [string]$Action = 'cr',
@@ -8,9 +8,9 @@ param(
   [ValidateSet('Idle','BelowNormal','Normal','AboveNormal','High','RealTime')]
   [string]$Priority = 'AboveNormal',
   [int]$Repeat = 1,
-  [switch]$Csv,                      
-  [string]$OutCsv = "bench\out.csv",   
-  [switch]$AppendCsv                  
+  [switch]$Csv,
+  [string]$OutCsv = "bench\out.csv",
+  [switch]$AppendCsv
 )
 
 function Resolve-RepoRoot {
@@ -26,6 +26,7 @@ function Get-Targets {
     mpsc           = @{ src = "bin\mpsc_bench.dart";          out = "bench\mpsc_bench.exe" }
     mpmc           = @{ src = "bin\mpmc_bench.dart";          out = "bench\mpmc_bench.exe" }
     oneshot        = @{ src = "bin\oneshot_bench.dart";       out = "bench\oneshot_bench.exe" }
+    broadcast      = @{ src = "bin\broadcast_bench.dart";     out = "bench\broadcast_bench.exe" }
   }
   if ($t -eq 'all') { return $map.GetEnumerator() | ForEach-Object { $_.Key, $_.Value } }
   if (-not $map.ContainsKey($t)) { throw "Unknown target '$t'." }
@@ -94,7 +95,7 @@ function Append-CsvLines {
   param([string]$path, [string]$stdout)
 
   $lines = $stdout -split "`r?`n" | Where-Object { $_ -and -not ($_ -match '^\s*$') }
-  $data  = $lines | Where-Object { $_ -notmatch '^suite,case,' } 
+  $data  = $lines | Where-Object { $_ -notmatch '^suite,case,' }
   if ($data.Count -gt 0) {
     $data | Out-File -Append -FilePath $path -Encoding utf8
   }
@@ -104,7 +105,7 @@ function Run-Target {
   param([string]$name, [hashtable]$meta)
 
   $out = $meta.out
-  
+
   Write-Host ""
   Write-Host ("Running {0} ({1} iterations)" -f $name, $Count) -ForegroundColor Green
 
@@ -113,7 +114,7 @@ function Run-Target {
     $args = @("$Count")
     if ($Csv) {
       $args += @("--csv")
-    } 
+    }
     $outTxt = Invoke-Exe -exe $out -argList $args
     $sw.Stop()
 

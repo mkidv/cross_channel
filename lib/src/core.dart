@@ -4,32 +4,199 @@ import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/lifecycle.dart';
 import 'package:cross_channel/src/metrics/recorders.dart';
 import 'package:cross_channel/src/ops.dart';
+import 'package:cross_channel/src/platform/platform.dart';
+import 'package:cross_channel/src/protocol.dart';
+import 'package:cross_channel/src/registry.dart';
+import 'package:cross_channel/src/remote.dart';
 import 'package:cross_channel/src/result.dart';
 
+export 'package:cross_channel/src/registry.dart';
+
 typedef Channel<T> = (Sender<T> tx, Receiver<T> rx);
+
+final _senderConnections = Expando<FlowControlledRemoteConnection<dynamic>>();
+final _receiverConnections = Expando<FlowControlledRemoteConnection<dynamic>>();
 
 /// Core channel traits: lifecycle + send/recv ops binding.
 ///
 /// `ChannelCore<T, Self>` ties a buffer implementation to lifecycle
 /// (attach/drop senders/receivers, disconnection semantics) and exposes the
-/// high-level send/recv operations via `ChannelOps<T>`.
+/// high-level send/recv operations via `ChannelSendOps<T>` and `ChannelRecvOps<T>`.
 abstract class ChannelCore<T, Self extends Object>
-    with ChannelLifecycle<T, Self>, ChannelOps<T> {
-  ChannelCore({String? metricsId, MetricsRecorder? metrics})
-      : _mx = metrics ?? buildMetricsRecorder(metricsId);
+    with ChannelSendOps<T>, ChannelRecvOps<T>, ChannelLifecycle<T, Self> {
+  ChannelCore({this.metricsId, MetricsRecorder? metrics})
+      : _mx = metrics ?? buildMetricsRecorder(metricsId) {
+    // Register immediately upon creation
+    _id = ChannelRegistry.register(this);
+  }
+
+  late final int _id;
+
+  /// The unique (local) ID of this channel channel.
+  int get id => _id;
+
+  @override
+  int get channelId => _id;
 
   @override
   ChannelBuffer<T> get buf;
   @override
-  bool get sendDisconnected;
+  bool get isSendClosed => sendDisconnected;
   @override
-  bool get recvDisconnected;
+  bool get isRecvClosed => recvDisconnected;
 
+  @override
+  ChannelCore<T, Object>? get localSendChannel => null;
+  @override
+  ChannelCore<T, Object>? get localRecvChannel => null;
+
+  final String? metricsId;
   final MetricsRecorder _mx;
 
   @override
   @pragma('vm:prefer-inline')
   MetricsRecorder get mx => _mx;
+
+  /// Create a PlatformReceiver for remote interactions (lazy loaded).
+  /// This receiver is used to receive messages from remote Isolates/Workers.
+  PlatformReceiver? _remoteReceiver;
+  final _connectedSenders = <FlowControlledRemoteConnection<T>>[];
+  int _activeProxyLoops = 0;
+
+  PlatformPort get sendPort {
+    if (_remoteReceiver == null) {
+      final rx = createReceiver();
+      _remoteReceiver = rx;
+      rx.messages.listen((msg) {
+        if (msg is T) {
+          buf.tryPush(msg);
+        } else if (msg is List) {
+          for (final v in msg) {
+            if (v is T) buf.tryPush(v);
+          }
+        } else if (msg is ConnectRecvRequest) {
+          _handleConnectRecvRequest(msg);
+        } else if (msg is ConnectSenderRequest) {
+          _handleConnectSenderRequest(msg);
+        } else if (msg is FlowCredit) {
+          for (final c in _connectedSenders) {
+            c.handleRemoteMessage(msg);
+          }
+        }
+        if (!buf.isEmpty) buf.wakeAllPushWaiters();
+      });
+    }
+    return _remoteReceiver!.sendPort;
+  }
+
+  void _handleConnectRecvRequest(ConnectRecvRequest req) {
+    // Determine if we can accept a new receiver
+    if (!allowMultiReceivers && _activeProxyLoops > 0) {
+      // Reject connection
+      req.replyPort.send(const Disconnect());
+      return;
+    }
+    _spawnProxyLoop(req.replyPort);
+  }
+
+  void _handleConnectSenderRequest(ConnectSenderRequest req) {
+    // Basic multi-sender check
+    if (!allowMultiSenders && _connectedSenders.isNotEmpty) {
+      // Reject connection
+      req.replyPort.send(const Disconnect());
+      return;
+    }
+
+    final conn = FlowControlledRemoteConnection<T>.forReceiver(
+      req.replyPort,
+      buffer: buf,
+    );
+    _connectedSenders.add(conn);
+    // Note: cleanup of _connectedSenders would require monitoring conn closure
+  }
+
+  Future<void> _spawnProxyLoop(PlatformPort remotePort) async {
+    _activeProxyLoops++;
+    const batchSize = 64;
+    final conn = FlowControlledRemoteConnection<T>.forSender(remotePort);
+
+    // Broadcast specialization: each remote subscriber needs its own cursor
+    final ring = buf is BroadcastRing<T> ? buf as BroadcastRing<T> : null;
+    final cursor = ring?.addSubscriber(0);
+
+    try {
+      while (!recvDisconnected) {
+        if (ring != null) {
+          final res = await ring.receive(cursor!);
+          if (res.isDisconnected) return;
+          if (res.hasValue) {
+            await conn.send(res.value);
+          }
+          continue;
+        }
+
+        // Fast path: drain immediately available items
+        final immediate = buf.tryPopMany(batchSize);
+        if (immediate.isNotEmpty) {
+          await conn.sendBatch(immediate);
+          continue;
+        }
+
+        // Slow path: wait for data
+        await buf.waitNotEmpty();
+        if (recvDisconnected) return;
+
+        var v = buf.tryPop();
+        if (v == null) {
+          // Rendezvous or race: wait for an actual handoff
+          final c = buf.addPopWaiter();
+          if (recvDisconnected) {
+            buf.removePopWaiter(c);
+            return;
+          }
+          try {
+            v = await c.future;
+          } catch (_) {
+            return;
+          }
+        }
+
+        // Got one, try to batch more
+        final more = buf.tryPopMany(batchSize - 1);
+        if (more.isEmpty) {
+          await conn.send(v as T);
+        } else {
+          await conn.sendBatch([v as T, ...more]);
+        }
+      }
+    } catch (_) {
+      // Disconnected or error - exit silently
+    } finally {
+      if (ring != null && cursor != null) {
+        ring.removeSubscriber(cursor);
+      }
+      conn.close();
+      _activeProxyLoops--;
+    }
+  }
+}
+
+/// Standard generic implementation of [ChannelCore].
+///
+final class StandardChannelCore<T> extends ChannelCore<T, StandardChannelCore<T>> {
+  StandardChannelCore(
+    this.buf, {
+    required this.allowMultiSenders,
+    required this.allowMultiReceivers,
+    super.metricsId,
+  });
+
+  @override
+  final ChannelBuffer<T> buf;
+  @override
+  final bool allowMultiSenders;
+  @override
+  final bool allowMultiReceivers;
 }
 
 abstract class Closeable {
@@ -40,17 +207,145 @@ abstract class Clones<Self> {
   Self clone();
 }
 
-abstract class Sender<T> {
-  bool get isDisconnected;
-  Future<SendResult> send(T value);
-  SendResult trySend(T value);
+/// A handle to a channel's sending side.
+///
+/// Can be sent between Isolates.
+abstract class Sender<T> with ChannelSendOps<T> {
+  /// The local ID of the channel.
+  @override
+  int get channelId;
+
+  ChannelCore<T, Object>? _cachedLocal;
+
+  @pragma('vm:prefer-inline')
+  @override
+  ChannelCore<T, Object>? get localSendChannel {
+    if (_cachedLocal != null) return _cachedLocal;
+    final local = ChannelRegistry.get(channelId);
+    if (local != null && !identical(local, this)) {
+      return _cachedLocal = local as ChannelCore<T, Object>;
+    }
+    return null;
+  }
+
+  /// The PlatformPort for remote communication.
+  @override
+  PlatformPort get remotePort;
+
+  FlowControlledRemoteConnection<T>? _cachedConn;
+
+  @pragma('vm:prefer-inline')
+  @override
+  FlowControlledRemoteConnection<T>? get remoteConnection {
+    if (localSendChannel != null) return null;
+    return _cachedConn ??= _senderConnections[this] as FlowControlledRemoteConnection<T>?;
+  }
+
+  /// Ensures connection is established for remote interactions
+  FlowControlledRemoteConnection<T> _ensureConnection() {
+    final existing = remoteConnection;
+    if (existing != null) return existing;
+
+    final newConn = FlowControlledRemoteConnection<T>.forSender(remotePort);
+    _senderConnections[this] = newConn;
+    _cachedConn = newConn;
+    return newConn;
+  }
+
+  @override
+  Future<SendResult> send(T value) async {
+    if (localSendChannel case final lc?) return lc.send(value);
+    if (isSendClosed) return const SendErrorDisconnected();
+
+    // Remote with Expando-based flow control
+    final t0 = mx.startSendTimer();
+    final rc = _ensureConnection();
+    await rc.send(value);
+    mx.sendOk(t0);
+    return const SendOk();
+  }
+
+  @override
+  SendResult trySend(T value) {
+    if (localSendChannel case final lc?) return lc.trySend(value);
+    if (isSendClosed) return const SendErrorDisconnected();
+
+    final t0 = mx.startSendTimer();
+    final rc = _ensureConnection();
+    if (rc.trySend(value)) {
+      mx.trySendOk(t0);
+      return const SendOk();
+    }
+    mx.trySendFail();
+    return SendErrorFull();
+  }
+
+  String? get metricsId => null;
+
+  @override
+  MetricsRecorder get mx => _mx ??= buildMetricsRecorder(metricsId);
+  MetricsRecorder? _mx;
+
+  @override
+  bool get isSendClosed => false;
+
+  /// The buffer is unused by Sender when using remotePort.
+  @override
+  ChannelBuffer<T>? get buf => null;
 }
 
-abstract class Receiver<T> {
-  bool get isDisconnected;
-  Future<RecvResult<T>> recv();
-  RecvResult<T> tryRecv();
-  (Future<RecvResult<T>>, void Function()) recvCancelable();
+/// A handle to a channel's receiving side.
+///
+/// Can be sent between Isolates.
+abstract class Receiver<T> with ChannelRecvOps<T> {
+  /// The local ID of the channel.
+  @override
+  int get channelId;
+
+  ChannelCore<T, Object>? _cachedLocal;
+
+  @pragma('vm:prefer-inline')
+  @override
+  ChannelCore<T, Object>? get localRecvChannel {
+    if (_cachedLocal != null) return _cachedLocal;
+    final local = ChannelRegistry.get(channelId);
+    if (local != null && !identical(local, this)) {
+      return _cachedLocal = local as ChannelCore<T, Object>;
+    }
+    return null;
+  }
+
+  /// The PlatformPort to communicate with the channel.
+  PlatformPort get remotePort;
+
+  String? get metricsId => null;
+
+  @override
+  MetricsRecorder get mx => _mx ??= buildMetricsRecorder(metricsId);
+  MetricsRecorder? _mx;
+
+  @override
+  bool get isRecvClosed => false;
+
+  /// Gets the remote buffer, initializing connection via Expando if needed.
+  @override
+  ChannelBuffer<T> get buf {
+    // If we have a stored connection in Expando, use its buffer
+    var conn = _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
+    if (conn != null) return conn.buffer!;
+
+    // Otherwise, create new connection and store it
+    conn = FlowControlledRemoteConnection<T>.forReceiver(remotePort);
+    _receiverConnections[this] = conn;
+    return conn.buffer!;
+  }
+
+  /// Closes the remote connection if active.
+  void closeRemote() {
+    final conn = _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
+    conn?.close();
+    _receiverConnections[this] = null;
+  }
 }
 
 abstract class KeepAliveSender<T> extends Sender<T> implements Closeable {}
@@ -64,257 +359,3 @@ abstract class CloneableSender<T> extends KeepAliveSender<T>
 
 abstract class CloneableReceiver<T> extends KeepAliveReceiver<T>
     implements Clones<CloneableReceiver<T>> {}
-
-/// Timeout operations for [Sender].
-///
-/// Prevents indefinite blocking by adding timeouts to send operations.
-/// Essential for building robust systems with predictable behavior.
-///
-/// **Usage:**
-/// ```dart
-/// import 'package:cross_channel/cross_channel.dart';
-///
-/// final result = await tx.sendTimeout(value, Duration(seconds: 5));
-/// if (result.isTimeout) {
-///   print('Send timed out, implementing fallback');
-/// }
-/// ```
-extension SenderTimeoutX<T> on Sender<T> {
-  /// Send a value with a timeout to prevent indefinite blocking.
-  ///
-  /// Returns [SendErrorTimeout] if the operation doesn't complete within
-  /// the specified [duration]. Useful for implementing deadlock-free systems.
-  ///
-  /// **Parameters:**
-  /// - [v]: The value to send
-  /// - [d]: Maximum time to wait for the send to complete
-  ///
-  /// **Example:**
-  /// ```dart
-  /// // Robust producer with timeout
-  /// for (final item in workItems) {
-  ///   final result = await tx.sendTimeout(item, Duration(seconds: 10));
-  ///   switch (result) {
-  ///     case SendOk():
-  ///       continue; // Success
-  ///     case SendErrorTimeout():
-  ///       print('Send timed out, skipping item');
-  ///     case SendErrorDisconnected():
-  ///       return; // No consumers
-  ///   }
-  /// }
-  /// ```
-  Future<SendResult> sendTimeout(T v, Duration d) async {
-    try {
-      return await send(v).timeout(
-        d,
-        onTimeout: () => SendErrorTimeout(d),
-      );
-    } catch (e) {
-      return SendErrorFailed(e);
-    }
-  }
-}
-
-/// Timeout operations for [Receiver].
-///
-/// Prevents indefinite blocking by adding timeouts to receive operations.
-/// Critical for building responsive applications that don't hang waiting for data.
-///
-/// **Usage:**
-/// ```dart
-/// final result = await rx.recvTimeout(Duration(seconds: 3));
-/// if (result.isTimeout) {
-///   print('No data received, using default');
-/// }
-/// ```
-extension ReceiverTimeoutX<T> on Receiver<T> {
-  /// Receive a value with a timeout to prevent indefinite waiting.
-  ///
-  /// Returns [RecvErrorTimeout] if no value arrives within the specified
-  /// [duration]. For cancelable receivers, properly cancels the operation.
-  ///
-  /// **Parameters:**
-  /// - [d]: Maximum time to wait for a value
-  ///
-  /// **Example:**
-  /// ```dart
-  /// // Responsive consumer with fallback
-  /// while (true) {
-  ///   final result = await rx.recvTimeout(Duration(seconds: 5));
-  ///   switch (result) {
-  ///     case RecvOk<String>(value: final data):
-  ///       processData(data);
-  ///     case RecvErrorTimeout():
-  ///       print('No data in 5s, sending heartbeat');
-  ///       sendHeartbeat();
-  ///     case RecvErrorDisconnected():
-  ///       return; // Channel closed
-  ///   }
-  /// }
-  /// ```
-  Future<RecvResult<T>> recvTimeout(Duration d) {
-    if (this is KeepAliveReceiver<T>) {
-      final (fut, cancel) = (this as KeepAliveReceiver<T>).recvCancelable();
-      return fut.timeout(d, onTimeout: () {
-        cancel();
-        return RecvErrorTimeout(d);
-      });
-    }
-    return recv().timeout(d, onTimeout: () => RecvErrorTimeout(d));
-  }
-}
-
-/// Batch sending operations for [Sender].
-///
-/// Efficiently send multiple values in sequence with different strategies
-/// for handling backpressure and disconnection.
-///
-/// **Usage:**
-/// ```dart
-/// final items = ['task1', 'task2', 'task3'];
-///
-/// // Best effort (may drop on full)
-/// await tx.trySendAll(items);
-///
-/// // With backpressure (waits when full)
-/// await tx.sendAll(items);
-/// ```
-extension SenderBatchX<T> on Sender<T> {
-  /// Send all items using [trySend] without waiting (best-effort).
-  ///
-  /// If the channel becomes full, items are silently dropped. Use this when
-  /// you want maximum throughput and can tolerate data loss.
-  ///
-  /// **Example:**
-  /// ```dart
-  /// // High-throughput logging (ok to drop on full)
-  /// final logs = generateLogEntries();
-  /// await tx.trySendAll(logs); // Fast, may drop some logs
-  /// ```
-  Future<void> trySendAll(Iterable<T> it) async {
-    for (final v in it) {
-      trySend(v);
-    }
-  }
-
-  /// Send all items with backpressure handling.
-  ///
-  /// Uses [trySend] first for speed, then falls back to [send] if the channel
-  /// is full. Stops immediately if the channel becomes disconnected.
-  ///
-  /// **Example:**
-  /// ```dart
-  /// // Reliable batch processing
-  /// final batch = await loadWorkBatch();
-  /// await tx.sendAll(batch); // Ensures all items are sent
-  /// ```
-  Future<void> sendAll(Iterable<T> it) async {
-    for (final v in it) {
-      final r = trySend(v);
-      if (r.isFull) {
-        await send(v);
-      } else if (r.isDisconnected) {
-        break;
-      }
-    }
-  }
-}
-
-/// Bulk receiving operations for [Receiver].
-///
-/// Efficiently drain multiple values from channels with different strategies
-/// for handling timeouts and limits. Essential for batch processing.
-///
-/// **Usage:**
-/// ```dart
-/// // Drain all immediately available
-/// final available = rx.tryRecvAll(max: 100);
-///
-/// // Wait and batch with timeout
-/// final batch = await rx.recvAll(
-///   idle: Duration(milliseconds: 100),
-///   max: 50,
-/// );
-/// ```
-extension ReceiverDrainX<T> on Receiver<T> {
-  /// Drain all immediately available values without waiting.
-  ///
-  /// Uses [tryRecv] internally, so it never blocks. Perfect for burst
-  /// processing when you want to consume everything that's ready.
-  ///
-  /// **Parameters:**
-  /// - [max]: Maximum number of items to receive (default: unlimited)
-  ///
-  /// **Example:**
-  /// ```dart
-  /// // Process all available log entries
-  /// final logs = rx.tryRecvAll(max: 1000);
-  /// if (logs.isNotEmpty) {
-  ///   await processBatchLogs(logs);
-  /// }
-  /// ```
-  Iterable<T> tryRecvAll({int? max}) {
-    final out = <T>[];
-    final limit = max ?? 0x7fffffff;
-    while (out.length < limit) {
-      final r = tryRecv();
-      if (r is RecvOk<T>) {
-        out.add(r.value);
-      } else {
-        break;
-      }
-    }
-    return out;
-  }
-
-  /// Receive multiple values with batching and idle timeout.
-  ///
-  /// First drains immediately available values, then waits up to [idle]
-  /// duration for additional values. Perfect for efficient batch processing.
-  ///
-  /// **Parameters:**
-  /// - [idle]: Maximum time to wait for additional values after receiving one
-  /// - [max]: Maximum number of items to receive (default: unlimited)
-  ///
-  /// **Example:**
-  /// ```dart
-  /// // Efficient batch processing with 100ms batching window
-  /// while (true) {
-  ///   final batch = await rx.recvAll(
-  ///     idle: Duration(milliseconds: 100),
-  ///     max: 50,
-  ///   );
-  ///
-  ///   if (batch.isNotEmpty) {
-  ///     await processBatch(batch.toList());
-  ///   } else {
-  ///     // Channel closed or timed out
-  ///     break;
-  ///   }
-  /// }
-  /// ```
-  Future<Iterable<T>> recvAll({Duration idle = Duration.zero, int? max}) async {
-    final out = <T>[];
-    final limit = max ?? 0x7fffffff;
-
-    out.addAll(tryRecvAll(max: limit));
-    if (out.length >= limit || idle == Duration.zero) return out;
-
-    while (out.length < limit) {
-      final next = await recvTimeout(idle);
-
-      if (next is RecvOk<T>) {
-        out.add(next.value);
-        if (out.length < limit) {
-          final remaining = limit - out.length;
-          final burst = tryRecvAll(max: remaining);
-          if (burst.isNotEmpty) out.addAll(burst);
-        }
-      } else {
-        break;
-      }
-    }
-    return out;
-  }
-}

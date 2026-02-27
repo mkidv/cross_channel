@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
+
 import 'package:cross_channel/mpsc.dart';
 import 'package:cross_channel/src/metrics.dart';
+
 import 'utils.dart';
 
 Future<void> main(List<String> args) async {
@@ -13,48 +16,42 @@ Future<void> main(List<String> args) async {
   // Warmup
   await benchPipeline(Mpsc.bounded<int>(1, metricsId: 'warmup'), 200_000);
 
-  await benchPingPong(
-      Mpsc.bounded<int>(1, metricsId: 'ping-pong cap=1 AB (1P/1C)'),
-      Mpsc.bounded<int>(1, metricsId: 'ping-pong cap=1 BA (1P/1C)'),
-      iters);
+  await benchPingPong(Mpsc.bounded<int>(1, metricsId: 'ping-pong cap=1 AB (1P/1C)'),
+      Mpsc.bounded<int>(1, metricsId: 'ping-pong cap=1 BA (1P/1C)'), iters);
+
+  await benchPipeline(Mpsc.bounded<int>(1024, metricsId: 'pipeline cap=1024 (1P/1C)'), iters);
 
   await benchPipeline(
-      Mpsc.bounded<int>(1024, metricsId: 'pipeline cap=1024 (1P/1C)'), iters);
+      Mpsc.unbounded<int>(chunked: false, metricsId: 'pipeline unbounded (1P/1C)'), iters);
 
-  await benchPipeline(
-      Mpsc.unbounded<int>(
-          chunked: false, metricsId: 'pipeline unbounded (1P/1C)'),
-      iters);
-
-  await benchPipeline(
-      Mpsc.unbounded<int>(metricsId: 'pipeline unbounded chunked (1P/1C)'),
-      iters);
+  await benchPipeline(Mpsc.unbounded<int>(metricsId: 'pipeline unbounded chunked (1P/1C)'), iters);
 
   await benchMultiPipeline(
-      Mpsc.bounded<int>(1024, metricsId: 'multi-producers cap=1024 (4P/1C)'),
-      iters,
-      4,
-      1);
+      Mpsc.bounded<int>(1024, metricsId: 'multi-producers cap=1024 (4P/1C)'), iters, 4, 1);
+
+  await benchPipeline(Mpsc.bounded<int>(0, metricsId: 'pipeline rendezvous cap=0 (1P/1C)'), iters);
 
   await benchPipeline(
-      Mpsc.bounded<int>(0, metricsId: 'pipeline rendezvous cap=0 (1P/1C)'),
+      Mpsc.channel<int>(
+          capacity: 1024, policy: DropPolicy.oldest, metricsId: 'sliding oldest cap=1024 (1P/1C)'),
       iters);
 
   await benchPipeline(
       Mpsc.channel<int>(
-          capacity: 1024,
-          policy: DropPolicy.oldest,
-          metricsId: 'sliding oldest cap=1024 (1P/1C)'),
-      iters);
-
-  await benchPipeline(
-      Mpsc.channel<int>(
-          capacity: 1024,
-          policy: DropPolicy.newest,
-          metricsId: 'sliding newest cap=1024 (1P/1C)'),
+          capacity: 1024, policy: DropPolicy.newest, metricsId: 'sliding newest cap=1024 (1P/1C)'),
       iters);
 
   await benchPipeline(Mpsc.latest<int>(metricsId: 'latestOnly (1P/1C)'), iters);
 
+  await benchCrossIsolatePipeline(
+      Mpsc.unbounded<int>(metricsId: 'cross-isolate pipeline (IsoA→IsoB)'),
+      iters ~/ 10);
+
+  await benchCrossIsolatePingPong(
+      Mpsc.bounded<int>(1, metricsId: 'cross-isolate ping-pong AB'),
+      Mpsc.bounded<int>(1, metricsId: 'cross-isolate ping-pong BA'),
+      iters ~/ 10);
+
   MetricsRegistry().export();
+  exit(0);
 }

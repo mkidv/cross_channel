@@ -1,14 +1,15 @@
 param(
-  [ValidateSet('spsc','mpsc','mpmc','oneshot','all')]
+  [ValidateSet('spsc','mpsc','mpmc','oneshot','broadcast','all')]
   [string]$Target = 'all',
   [int]$Count = 1000000
 )
 
 $map = @{
-  spsc="bin\spsc_bench.dart"; 
-  mpsc="bin\mpsc_bench.dart"; 
+  spsc="bin\spsc_bench.dart";
+  mpsc="bin\mpsc_bench.dart";
   mpmc="bin\mpmc_bench.dart"
   oneshot="bin\oneshot_bench.dart";
+  broadcast="bin\broadcast_bench.dart";
 }
 if ($Target -eq 'all') { $targets = $map.Keys } else { $targets = @($Target) }
 

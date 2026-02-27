@@ -8,12 +8,16 @@ analyzer:
   exclude:
     - .dart_tool/**
     - build/**
-    - bench/** 
+    - bench/**
     - bench/*.exe
     - bench/*.csv
+    - doc/**
   errors:
     unused_import: error
     dead_code: error
+    unused_local_variable: error
+    unused_element: error
+    always_use_package_imports: error
 
 linter:
   rules:
@@ -26,3 +30,10 @@ linter:
     - prefer_final_locals
     - prefer_single_quotes
     - unawaited_futures
+    - await_only_futures
+    - avoid_void_async
+    - camel_case_types
+    - directives_ordering
+    - unnecessary_parenthesis
+    - unnecessary_lambdas
+

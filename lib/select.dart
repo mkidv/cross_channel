@@ -264,8 +264,7 @@ class SelectBuilder<R> {
   /// **See also:**
   /// - [onFuture] - Parent
   /// - [onFutureValue] - Only handle value
-  SelectBuilder<R> onFutureError<T>(
-      Future<T> fut, FutureOr<R> Function(Object error) body,
+  SelectBuilder<R> onFutureError<T>(Future<T> fut, FutureOr<R> Function(Object error) body,
       {Object? tag, bool Function()? if_}) {
     return onFuture<T>(fut.catchError((Object e) => throw e),
         (_) => throw StateError('onFutureError should not handle success'),
@@ -315,8 +314,7 @@ class SelectBuilder<R> {
   /// ```
   /// **See also:**
   /// - [onStream] - Handle full stream
-  SelectBuilder<R> onStreamDone<T>(
-      Stream<T> stream, FutureOr<R> Function() body,
+  SelectBuilder<R> onStreamDone<T>(Stream<T> stream, FutureOr<R> Function() body,
       {Object? tag, bool Function()? if_}) {
     return onFuture<void>(stream.drain(), (_) => body(), tag: tag, if_: if_);
   }
@@ -392,7 +390,7 @@ class SelectBuilder<R> {
         return onError(result.error);
       }
       return Future<R>.error(StateError('Unexpected RecvResult: $result'));
-    }, tag: tag, if_: if_ ?? () => !rx.isDisconnected);
+    }, tag: tag, if_: if_ ?? () => !rx.recvDisconnected);
   }
 
   /// Race a channel receiver - only handle error messages.
@@ -412,15 +410,14 @@ class SelectBuilder<R> {
   /// **See also:**
   /// - [onRecv] - Parent
   /// - [onRecvValue] - Only handle successful result
-  SelectBuilder<R> onRecvError<T>(
-      Receiver<T> rx, FutureOr<R> Function(RecvError error) body,
+  SelectBuilder<R> onRecvError<T>(Receiver<T> rx, FutureOr<R> Function(RecvError error) body,
       {Object? tag, bool Function()? if_}) {
     return onRecv<T>(rx, (result) {
       if (result.hasError) {
         return body(result.error);
       }
       return Future<R>.error(StateError('Unexpected RecvResult: $result'));
-    }, tag: tag, if_: if_ ?? () => !rx.isDisconnected);
+    }, tag: tag, if_: if_ ?? () => !rx.recvDisconnected);
   }
 
   /// Wait for a channel send operation to complete.
@@ -444,8 +441,7 @@ class SelectBuilder<R> {
   ///   ..onTimeout(Duration(seconds: 10), () => 'Send timeout')
   /// );
   /// ```
-  SelectBuilder<R> onSend<T>(
-      Sender<T> sender, T value, FutureOr<R> Function() body,
+  SelectBuilder<R> onSend<T>(Sender<T> sender, T value, FutureOr<R> Function() body,
       {Object? tag, bool Function()? if_}) {
     return onFuture(sender.send(value), (_) => body(), tag: tag, if_: if_);
   }
@@ -723,10 +719,7 @@ class SelectBuilder<R> {
     if (!_ordered && active.length > 1) {
       final n = active.length;
       final offset = DateTime.now().microsecondsSinceEpoch % n;
-      final rotated = <SelectBranch<R>>[
-        ...active.skip(offset),
-        ...active.take(offset)
-      ];
+      final rotated = <SelectBranch<R>>[...active.skip(offset), ...active.take(offset)];
       active
         ..clear()
         ..addAll(rotated);

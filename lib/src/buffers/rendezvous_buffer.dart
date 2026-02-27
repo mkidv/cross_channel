@@ -7,6 +7,7 @@ final class RendezvousBuffer<T> implements ChannelBuffer<T> {
 
   final _pushWaiters = ListQueue<Completer<void>>();
   final _popWaiters = ListQueue<Completer<T>>();
+  final _notEmptyWaiters = ListQueue<Completer<void>>();
 
   @pragma('vm:prefer-inline')
   @override
@@ -27,11 +28,29 @@ final class RendezvousBuffer<T> implements ChannelBuffer<T> {
   T? tryPop() => null;
 
   @override
+  List<T> tryPopMany(int max) => const [];
+
+  @override
+  Future<void> waitNotEmpty() async {
+    if (_pushWaiters.isNotEmpty) return;
+    final c = Completer<void>();
+    _notEmptyWaiters.addLast(c);
+    await c.future;
+  }
+
+  @override
   Future<void> waitNotFull() async {
     if (_popWaiters.isNotEmpty) return;
     final c = Completer<void>();
     _pushWaiters.addLast(c);
+    _notifyNotEmpty();
     await c.future;
+  }
+
+  void _notifyNotEmpty() {
+    while (_notEmptyWaiters.isNotEmpty) {
+      _notEmptyWaiters.removeFirst().complete();
+    }
   }
 
   @override
@@ -66,8 +85,15 @@ final class RendezvousBuffer<T> implements ChannelBuffer<T> {
     while (_popWaiters.isNotEmpty) {
       _popWaiters.removeFirst().completeError(e);
     }
+    while (_notEmptyWaiters.isNotEmpty) {
+      _notEmptyWaiters.removeFirst().completeError(e);
+    }
   }
 
   @override
-  void clear() {}
+  void clear() {
+    while (_notEmptyWaiters.isNotEmpty) {
+      _notEmptyWaiters.removeFirst().completeError(StateError('Buffer cleared'));
+    }
+  }
 }

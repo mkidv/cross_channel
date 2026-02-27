@@ -3,17 +3,12 @@ part of '../buffers.dart';
 /// Unbounded "burst-proof" FIFO queue
 /// producers never block
 /// hot ring + chunked overflow (no per-element alloc, no bulk grow)
-///
 final class ChunkedBuffer<T> implements ChannelBuffer<T> {
   ChunkedBuffer({
     this.hotCapacityPow2 = 8192,
     this.chunkCapacityPow2 = 4096,
     this.rebalanceBatch = 64,
-
-    /// pow2 (16, 32…)
     this.rebalanceThresholdDiv = 16,
-
-    /// pow2 (2, 4)
     this.minChunkGateDiv = 2,
   })  : assert(hotCapacityPow2 >= 2),
         assert(chunkCapacityPow2 >= 2),
@@ -35,9 +30,7 @@ final class ChunkedBuffer<T> implements ChannelBuffer<T> {
 
   // overflow queue
   final ListQueue<_Chunk<T>> _ov = ListQueue<_Chunk<T>>();
-
-  final _popWaiters = ListQueue<Completer<T>>();
-  Completer<T>? _fastWaiter;
+  final _waiters = PopWaiterQueue<T>();
 
   factory ChunkedBuffer.forBurst(int burst,
       {int? rebalanceBatch,
@@ -66,24 +59,21 @@ final class ChunkedBuffer<T> implements ChannelBuffer<T> {
   bool get isEmpty => _ringEmpty && _ov.isEmpty;
 
   @pragma('vm:prefer-inline')
+  int _divPowOrInt(int v, int div) =>
+      (div & (div - 1)) == 0 ? (v >> (div.bitLength - 1)) : (v ~/ div);
+
+  @pragma('vm:prefer-inline')
   @override
   bool tryPush(T v) {
-    if (isEmpty) {
-      final fw = _fastWaiter;
-      if (fw != null) {
-        _fastWaiter = null;
-        fw.complete(v);
-        return true;
-      }
-      if (_popWaiters.isNotEmpty) {
-        _popWaiters.removeFirst().complete(v);
-        return true;
-      }
+    // Fast path: complete waiting receiver directly
+    if (isEmpty && _waiters.completeOne(v)) {
+      return true;
     }
 
     if (!_ringFull) {
       _ring[_tail] = v;
       _tail = _nextRing(_tail);
+      _waiters.wakeNotEmptyWaiters();
       return true;
     }
     // overflow chunked
@@ -93,6 +83,7 @@ final class ChunkedBuffer<T> implements ChannelBuffer<T> {
       _ov.addLast(tailChunk);
     }
     tailChunk.push(v);
+    _waiters.wakeNotEmptyWaiters();
     return true;
   }
 
@@ -112,23 +103,15 @@ final class ChunkedBuffer<T> implements ChannelBuffer<T> {
     if (rebalanceBatch > 0 && _ov.isNotEmpty) {
       final int fill = (_tail - _head) & _ringMask;
       final int capacity = _ringMask + 1;
-      // seuil = capacity / rebalanceThresholdDiv if pow2 == shift.
-      final int threshold =
-          (rebalanceThresholdDiv & (rebalanceThresholdDiv - 1)) == 0
-              ? (capacity >> (rebalanceThresholdDiv.bitLength - 1))
-              : (capacity ~/ rebalanceThresholdDiv);
+      final int threshold = _divPowOrInt(capacity, rebalanceThresholdDiv);
+
       if (fill <= threshold) {
-        // Batch
-        final int maxMove = (rebalanceBatch <= 16 && capacity <= 2048)
-            ? rebalanceBatch
-            : (rebalanceBatch >> 1);
+        final int maxMove =
+            (rebalanceBatch <= 16 && capacity <= 2048) ? rebalanceBatch : (rebalanceBatch >> 1);
         var moved = 0;
         while (moved < maxMove && !_ringFull && _ov.isNotEmpty) {
           final c = _ov.first;
-          // wait size/minChunkGateDiv.
-          final int gate = (minChunkGateDiv & (minChunkGateDiv - 1)) == 0
-              ? (c.sizePow2 >> (minChunkGateDiv.bitLength - 1))
-              : (c.sizePow2 ~/ minChunkGateDiv);
+          final int gate = _divPowOrInt(c.sizePow2, minChunkGateDiv);
           final approxCount = (c._t - c._h) & c._mask;
           if (approxCount < gate) break;
           final x = c.pop();
@@ -147,68 +130,51 @@ final class ChunkedBuffer<T> implements ChannelBuffer<T> {
   }
 
   @override
+  List<T> tryPopMany(int max) {
+    if (isEmpty) return const [];
+    final out = <T>[];
+    while (out.length < max) {
+      final v = tryPop();
+      if (v == null) break;
+      out.add(v);
+    }
+    return out;
+  }
+
+  @override
+  Future<void> waitNotEmpty() async {
+    if (!isEmpty) return;
+    await _waiters.addNotEmptyWaiter().future;
+  }
+
+  @override
   Future<void> waitNotFull() async {}
   @override
   void consumePushPermit() {}
 
   @pragma('vm:prefer-inline')
   @override
-  Completer<T> addPopWaiter() {
-    final c = Completer<T>.sync();
-    final v = tryPop();
-    if (v != null) {
-      c.complete(v);
-      return c;
-    }
-    if (_fastWaiter == null) {
-      _fastWaiter = c;
-      if (!isEmpty && identical(_fastWaiter, c)) {
-        _fastWaiter = null;
-        final v2 = tryPop();
-        if (v2 != null) {
-          c.complete(v2);
-          return c;
-        }
-        _fastWaiter = c;
-      }
-      return c;
-    }
-    _popWaiters.addLast(c);
-    return c;
-  }
+  Completer<T> addPopWaiter() => _waiters.add(tryPop, () => isEmpty);
 
   @pragma('vm:prefer-inline')
   @override
-  bool removePopWaiter(Completer<T> c) {
-    if (identical(_fastWaiter, c)) {
-      _fastWaiter = null;
-      return true;
-    }
-    return _popWaiters.remove(c);
-  }
+  bool removePopWaiter(Completer<T> c) => _waiters.remove(c);
 
   @override
   void wakeAllPushWaiters() {}
 
   @override
-  void failAllPopWaiters(Object e) {
-    final fw = _fastWaiter;
-    _fastWaiter = null;
-    if (fw != null) fw.completeError(e);
-    while (_popWaiters.isNotEmpty) {
-      _popWaiters.removeFirst().completeError(e);
-    }
-  }
+  void failAllPopWaiters(Object e) => _waiters.failAll(e);
 
   @override
   void clear() {
-    _fastWaiter = null;
     while (!_ringEmpty) {
       _ring[_head] = null;
       _head = _nextRing(_head);
     }
     _head = _tail = 0;
     _ov.clear();
+    _waiters.clear();
   }
 
   @pragma('vm:prefer-inline')
@@ -240,7 +206,6 @@ final class _Chunk<T> {
 
   @pragma('vm:prefer-inline')
   void push(T v) {
-    // assume not full
     _buf[_t] = v;
     _t = (_t + 1) & _mask;
   }

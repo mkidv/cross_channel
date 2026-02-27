@@ -40,8 +40,6 @@ class StreamBranch<T, R> implements SelectBranch<R> {
     }, onError: (Object e, StackTrace? st) {
       if (canceled) return;
       resolve(index, tag, Future<R>.error(e, st));
-    }, onDone: () {
-      cancel();
-    }, cancelOnError: false);
+    }, onDone: cancel, cancelOnError: false);
   }
 }

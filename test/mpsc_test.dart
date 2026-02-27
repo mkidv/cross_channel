@@ -304,7 +304,7 @@ void main() {
     test('clone() after sender closed -> StateError', () async {
       final (tx, _) = Mpsc.unbounded<int>();
       tx.close();
-      expect(() => tx.clone(), throwsA(isA<StateError>()));
+      expect(tx.clone, throwsA(isA<StateError>()));
     });
   });
 

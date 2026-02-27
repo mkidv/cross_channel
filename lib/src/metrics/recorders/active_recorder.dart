@@ -27,24 +27,33 @@ final class ActiveMetricsRecorder implements MetricsRecorder {
   @pragma('vm:prefer-inline')
   void sendOk(int t0) {
     m.sent++;
-    if (t0 != 0) m.sendLatency.insert((_nowNs() - t0).toDouble());
-    m.markSendNowNs(_nowNs());
+    if (t0 != 0) {
+      final now = _nowNs();
+      m.sendLatency.insert((now - t0).toDouble());
+      m.markSendNowNs(now);
+    }
   }
 
   @override
   @pragma('vm:prefer-inline')
   void recvOk(int t0) {
     m.recv++;
-    if (t0 != 0) m.recvLatency.insert((_nowNs() - t0).toDouble());
-    m.markRecvNowNs(_nowNs());
+    if (t0 != 0) {
+      final now = _nowNs();
+      m.recvLatency.insert((now - t0).toDouble());
+      m.markRecvNowNs(now);
+    }
   }
 
   @override
   @pragma('vm:prefer-inline')
   void trySendOk(int t0) {
     m.trySendOk++;
-    if (t0 != 0) m.sendLatency.insert((_nowNs() - t0).toDouble());
-    m.markSendNowNs(_nowNs());
+    if (t0 != 0) {
+      final now = _nowNs();
+      m.sendLatency.insert((now - t0).toDouble());
+      m.markSendNowNs(now);
+    }
   }
 
   @override
@@ -57,8 +66,11 @@ final class ActiveMetricsRecorder implements MetricsRecorder {
   @pragma('vm:prefer-inline')
   void tryRecvOk(int t0) {
     m.tryRecvOk++;
-    if (t0 != 0) m.recvLatency.insert((_nowNs() - t0).toDouble());
-    m.markRecvNowNs(_nowNs());
+    if (t0 != 0) {
+      final now = _nowNs();
+      m.recvLatency.insert((now - t0).toDouble());
+      m.markRecvNowNs(now);
+    }
   }
 
   @override

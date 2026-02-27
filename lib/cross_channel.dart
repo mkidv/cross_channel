@@ -1,15 +1,15 @@
-import 'package:cross_channel/mpsc.dart';
+import 'package:cross_channel/broadcast.dart';
 import 'package:cross_channel/mpmc.dart';
+import 'package:cross_channel/mpsc.dart';
 import 'package:cross_channel/oneshot.dart';
 import 'package:cross_channel/spsc.dart';
 
+export 'broadcast.dart';
 export 'notify.dart';
 export 'select.dart';
-export 'src/core.dart'
-    show SenderBatchX, SenderTimeoutX, ReceiverDrainX, ReceiverTimeoutX;
-export 'src/result.dart';
 export 'src/buffers.dart' show DropPolicy, OnDrop;
-export 'src/channel_type.dart';
+export 'src/extensions.dart';
+export 'src/result.dart';
 
 /// High-level factory for creating channels with Rust-style concurrency primitives.
 ///
@@ -102,7 +102,7 @@ final class XChannel {
   /// - [XChannel.spsc] for efficient single-producer scenarios
   /// - [XChannel.mpscLatest] for latest-only progress updates
   /// - [Mpsc.channel], [Mpsc.unbounded], [Mpsc.bounded] for low-level api
-  static (MpscSender<T>, MpscReceiver<T>) mpsc<T>(
+  static MpscChannel<T> mpsc<T>(
           {int? capacity,
           DropPolicy policy = DropPolicy.block,
           OnDrop<T>? onDrop,
@@ -161,7 +161,7 @@ final class XChannel {
   /// - [XChannel.mpsc] for single-consumer scenarios
   /// - [XChannel.mpmcLatest] for competitive latest-only consumption
   /// - [Mpmc.channel], [Mpmc.unbounded], [Mpmc.bounded] for low-level api
-  static (MpmcSender<T>, MpmcReceiver<T>) mpmc<T>(
+  static MpmcChannel<T> mpmc<T>(
           {int? capacity,
           DropPolicy policy = DropPolicy.block,
           OnDrop<T>? onDrop,
@@ -225,8 +225,7 @@ final class XChannel {
   /// - [XChannel.mpsc] for multi-value streaming
   /// - [Notify] for payload-free signaling
   /// - [OneShot.channel] for low-level api
-  static (OneShotSender<T>, OneShotReceiver<T>) oneshot<T>(
-      {bool consumeOnce = false, String? metricsId}) {
+  static OneShotChannel<T> oneshot<T>({bool consumeOnce = false, String? metricsId}) {
     return OneShot.channel<T>(consumeOnce: consumeOnce, metricsId: metricsId);
   }
 
@@ -266,8 +265,7 @@ final class XChannel {
   /// - [XChannel.mpsc] for multiple producers
   /// - [XChannel.mpmc] for multiple consumers
   /// - [Spsc.channel] for low-level api
-  static (SpscSender<T>, SpscReceiver<T>) spsc<T>(
-      {required int capacity, String? metricsId}) {
+  static SpscChannel<T> spsc<T>({required int capacity, String? metricsId}) {
     return Spsc.channel<T>(capacity, metricsId: metricsId);
   }
 
@@ -304,8 +302,7 @@ final class XChannel {
   /// **See also:**
   /// - [XChannel.mpmcLatest] for competitive consumption
   /// - [Mpsc.latest] for low-level api
-  static (MpscSender<T>, MpscReceiver<T>) mpscLatest<T>({String? metricsId}) =>
-      Mpsc.latest<T>(metricsId: metricsId);
+  static MpscChannel<T> mpscLatest<T>({String? metricsId}) => Mpsc.latest<T>(metricsId: metricsId);
 
   /// Creates a latest-only MPMC channel with competitive consumption.
   ///
@@ -337,6 +334,30 @@ final class XChannel {
   /// **See also:**
   /// - [XChannel.mpscLatest] for single consumer
   /// - [Mpmc.latest] for low-level api
-  static (MpmcSender<T>, MpmcReceiver<T>) mpmcLatest<T>({String? metricsId}) =>
-      Mpmc.latest<T>(metricsId: metricsId);
+  static MpmcChannel<T> mpmcLatest<T>({String? metricsId}) => Mpmc.latest<T>(metricsId: metricsId);
+
+  /// Creates a Broadcast channel for one-to-many communication.
+  ///
+  /// All subscribers receive all messages (if they keep up).
+  /// Features **Ring Buffer** design with lag detection and **History Replay**.
+  ///
+  /// **Parameters:**
+  /// - [capacity]: Buffer size (fixed, power of 2).
+  ///
+  /// **Examples:**
+  ///
+  /// ```dart
+  /// final (tx, broadcast) = XChannel.broadcast<Event>(capacity: 1024);
+  ///
+  /// // Subscriber 1
+  /// final sub1 = broadcast.subscribe();
+  ///
+  /// // Subscriber 2 (replays last 10 events)
+  /// final sub2 = broadcast.subscribe(replay: 10);
+  ///
+  /// tx.send(Event());
+  /// ```
+  static BroadcastChannel<T> broadcast<T>({required int capacity, String? metricsId}) {
+    return Broadcast.channel<T>(capacity, metricsId: metricsId);
+  }
 }

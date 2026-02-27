@@ -17,6 +17,7 @@ final class SrswBuffer<T> implements ChannelBuffer<T> {
 
   Completer<void>? _spaceWaiter;
   Completer<T>? _dataWaiter;
+  final _notEmptyWaiters = ListQueue<Completer<void>>();
 
   @pragma('vm:prefer-inline')
   @override
@@ -37,7 +38,14 @@ final class SrswBuffer<T> implements ChannelBuffer<T> {
     if (nextTail == _head) return false;
     _buf[_tail] = v;
     _tail = nextTail;
+    _notifyNotEmpty();
     return true;
+  }
+
+  void _notifyNotEmpty() {
+    while (_notEmptyWaiters.isNotEmpty) {
+      _notEmptyWaiters.removeFirst().complete();
+    }
   }
 
   @pragma('vm:prefer-inline')
@@ -53,10 +61,39 @@ final class SrswBuffer<T> implements ChannelBuffer<T> {
   }
 
   @override
+  List<T> tryPopMany(int max) {
+    if (isEmpty) return const [];
+    final out = <T>[];
+    while (out.length < max && !isEmpty) {
+      final v = _buf[_head] as T;
+      _buf[_head] = null;
+      _head = (_head + 1) & _mask;
+      out.add(v);
+    }
+    _spaceWaiter?.complete();
+    _spaceWaiter = null;
+    return out;
+  }
+
+  @override
+  Future<void> waitNotEmpty() async {
+    if (!isEmpty) return;
+    final c = Completer<void>.sync();
+    _notEmptyWaiters.addLast(c);
+    await c.future;
+  }
+
+  @override
   Future<void> waitNotFull() async {
     if (!_isFull) return;
     final c = Completer<void>();
     _spaceWaiter = c;
+    if (!_isFull && identical(_spaceWaiter, c)) {
+      // recheck
+      _spaceWaiter = null;
+      c.complete();
+      return;
+    }
     await c.future;
   }
 
@@ -107,6 +144,9 @@ final class SrswBuffer<T> implements ChannelBuffer<T> {
       _dataWaiter!.completeError(e);
       _dataWaiter = null;
     }
+    while (_notEmptyWaiters.isNotEmpty) {
+      _notEmptyWaiters.removeFirst().completeError(e);
+    }
   }
 
   @override
@@ -114,6 +154,9 @@ final class SrswBuffer<T> implements ChannelBuffer<T> {
     while (!isEmpty) {
       _buf[_head] = null;
       _head = (_head + 1) & _mask;
+    }
+    while (_notEmptyWaiters.isNotEmpty) {
+      _notEmptyWaiters.removeFirst().completeError(StateError('Buffer cleared'));
     }
   }
 

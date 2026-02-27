@@ -177,6 +177,24 @@ class Notify {
     }
   }
 
+  void notifyN(int n) {
+    if (_closed || n <= 0) return;
+    _epoch += n;
+    while (n-- > 0 && _waiters.isNotEmpty) {
+      final c = _waiters.removeAt(0);
+      if (!c.isCompleted) c.complete();
+    }
+    if (n > 0) _permits += n;
+  }
+
+  Future<void> notifiedTimeout(Duration d) {
+    final (fut, cancel) = notified();
+    return fut.timeout(d, onTimeout: () {
+      cancel();
+      throw TimeoutException('Notify.wait timed out after $d');
+    });
+  }
+
   /// Close this [Notify] and fail all current and future waiters.
   ///
   /// All currently waiting tasks will fail with [StateError], and any

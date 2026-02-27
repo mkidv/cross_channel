@@ -1,10 +1,9 @@
 import 'dart:async';
-import 'package:web/web.dart';
 import 'dart:js_interop';
 
-import 'package:cross_channel/mpsc.dart';
 import 'package:cross_channel/mpmc.dart';
-import 'package:cross_channel/src/channel_type.dart';
+import 'package:cross_channel/mpsc.dart';
+import 'package:web/web.dart';
 
 /// Type-safe Web Worker communication with MessageChannel integration.
 ///
@@ -143,11 +142,9 @@ extension MessagePortRequestX on MessagePort {
 /// Essential for building robust Web Worker architectures with proper
 /// error handling and message flow control.
 extension MessagePortToChannelX on MessagePort {
-  /// Convert port messages to MPSC channel (legacy method).
+  /// Convert port messages to MPSC channel.
   ///
-  /// **Deprecated**: Use [toChannel] with `type: ChannelType.mpsc` for new code.
   /// When `strict == true`, the port is closed on unexpected message types.
-  ///
   (MpscSender<T>, MpscReceiver<T>) toMpsc<T>({
     int? capacity,
     DropPolicy policy = DropPolicy.block,
@@ -173,11 +170,9 @@ extension MessagePortToChannelX on MessagePort {
     return (tx, rx);
   }
 
-  /// Convert port messages to MPMC channel (legacy method).
+  /// Convert port messages to MPMC channel.
   ///
-  /// **Deprecated**: Use [toChannel] with `type: ChannelType.mpmc` for new code.
   /// When `strict == true`, the port is closed on unexpected message types.
-  ///
   (MpmcSender<T>, MpmcReceiver<T>) toMpmc<T>({
     int? capacity,
     DropPolicy policy = DropPolicy.block,
@@ -201,61 +196,5 @@ extension MessagePortToChannelX on MessagePort {
       }
     }).toJS;
     return (tx, rx);
-  }
-
-  /// Convert port messages to a channel with unified API.
-  ///
-  /// Modern, unified approach that replaces [toMpsc] and [toMpmc].
-  /// When `strict == true`, the port is closed on unexpected message types.
-  ///
-  /// **Parameters:**
-  /// - [type]: Channel type (mpsc or mpmc)
-  /// - [capacity]: Buffer size (null = unbounded, 0 = rendezvous)
-  /// - [policy]: Drop policy for bounded channels
-  /// - [onDrop]: Optional callback for dropped items
-  /// - [chunked]: Use optimized chunked buffer
-  /// - [strict]: Close port on type mismatches
-  ///
-  /// **Example:**
-  /// ```dart
-  /// // Web Worker communication
-  /// final worker = Worker('processor.js');
-  /// final channel = MessageChannel();
-  /// worker.postMessage({'port': channel.port1}, [channel.port1]);
-  ///
-  /// final (tx, rx) = channel.port2.toChannel<ProcessingTask>(
-  ///   type: ChannelType.mpsc,
-  ///   capacity: 500,
-  /// );
-  ///
-  /// // Send tasks to worker
-  /// await tx.send(ProcessingTask('heavy_computation', data));
-  /// ```
-  (dynamic, dynamic) toChannel<T>(
-    ChannelType type, {
-    int? capacity,
-    DropPolicy policy = DropPolicy.block,
-    OnDrop<T>? onDrop,
-    bool chunked = true,
-    bool strict = true,
-  }) {
-    switch (type) {
-      case ChannelType.mpsc:
-        return toMpsc<T>(
-          capacity: capacity,
-          policy: policy,
-          onDrop: onDrop,
-          chunked: chunked,
-          strict: strict,
-        );
-      case ChannelType.mpmc:
-        return toMpmc<T>(
-          capacity: capacity,
-          policy: policy,
-          onDrop: onDrop,
-          chunked: chunked,
-          strict: strict,
-        );
-    }
   }
 }

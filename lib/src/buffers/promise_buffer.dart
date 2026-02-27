@@ -12,6 +12,7 @@ final class PromiseBuffer<T> implements ChannelBuffer<T> {
   bool _has = false;
   bool _consumed = false;
   final _popWaiters = ListQueue<Completer<T>>();
+  final _notEmptyWaiters = ListQueue<Completer<void>>();
 
   @pragma('vm:prefer-inline')
   @override
@@ -43,6 +44,9 @@ final class PromiseBuffer<T> implements ChannelBuffer<T> {
     }
     _value = v;
     _has = true;
+    while (_notEmptyWaiters.isNotEmpty) {
+      _notEmptyWaiters.removeFirst().complete();
+    }
     return true;
   }
 
@@ -57,6 +61,20 @@ final class PromiseBuffer<T> implements ChannelBuffer<T> {
       _consumed = true;
     }
     return v;
+  }
+
+  @override
+  List<T> tryPopMany(int max) {
+    final v = tryPop();
+    return v == null ? const [] : [v];
+  }
+
+  @override
+  Future<void> waitNotEmpty() async {
+    if (!isEmpty) return;
+    final c = Completer<void>.sync();
+    _notEmptyWaiters.addLast(c);
+    await c.future;
   }
 
   @override
@@ -97,6 +115,9 @@ final class PromiseBuffer<T> implements ChannelBuffer<T> {
     while (_popWaiters.isNotEmpty) {
       _popWaiters.removeFirst().completeError(e);
     }
+    while (_notEmptyWaiters.isNotEmpty) {
+      _notEmptyWaiters.removeFirst().completeError(e);
+    }
   }
 
   @override
@@ -104,5 +125,8 @@ final class PromiseBuffer<T> implements ChannelBuffer<T> {
     _value = null;
     _has = false;
     _consumed = false;
+    while (_notEmptyWaiters.isNotEmpty) {
+      _notEmptyWaiters.removeFirst().completeError(StateError('Buffer cleared'));
+    }
   }
 }
