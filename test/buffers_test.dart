@@ -176,10 +176,10 @@ void main() {
     test('waitNotEmpty and waitNotFull', () async {
       final buf = RendezvousBuffer<int>();
       bool notEmptyAwake = false;
-      buf.waitNotEmpty().then((_) => notEmptyAwake = true);
+      unawaited(buf.waitNotEmpty().then((_) => notEmptyAwake = true));
 
       bool notFullAwake = false;
-      buf.waitNotFull().then((_) => notFullAwake = true);
+      unawaited(buf.waitNotFull().then((_) => notFullAwake = true));
 
       final waiter = buf.addPopWaiter(); // A push waiter can now proceed
       await Future<void>.delayed(Duration.zero);

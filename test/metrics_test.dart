@@ -217,7 +217,9 @@ void main() {
 
     test('quantile and interpolation', () {
       final p2 = P2Quantiles([0.5, 0.9]);
-      for (var i = 1; i <= 100; i++) p2.insert(i.toDouble());
+      for (var i = 1; i <= 100; i++) {
+        p2.insert(i.toDouble());
+      }
       expect(p2.quantile(0.9, interpolate: false), isNotNull);
       expect(p2.quantile(0.75), isNotNull);
       expect(p2.quantile(0.75, interpolate: false), isNotNull);

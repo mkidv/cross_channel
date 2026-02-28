@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/platform/platform.dart';
 import 'package:cross_channel/src/protocol.dart';
@@ -91,12 +93,12 @@ void main() {
       expect(senderConn.credits, 1);
 
       // send() without await should consume the remaining credit
-      senderConn.send(2);
+      unawaited(senderConn.send(2));
       expect(senderConn.credits, 0);
 
       // sendBatch should only send what it can, and block for the rest
       bool blocked = false;
-      senderConn.sendBatch([3, 4]).then((_) => blocked = false);
+      unawaited(senderConn.sendBatch([3, 4]).then((_) => blocked = false));
       blocked = true;
 
       // Wait a bit to ensure it is blocked
