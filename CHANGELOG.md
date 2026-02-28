@@ -10,6 +10,40 @@
 
 ---
 
+## [0.10.0] – 2026-02-28
+
+### Added
+
+- **Transferable Handles** (`toTransferable` / `fromTransferable`):
+  - All `Sender` and `Receiver` types can now be serialized for transfer across **Web Workers** (via `postMessage`) and **Isolates**.
+  - `toTransferable()` returns a `Map<String, Object?>` containing the raw platform port + metadata.
+  - `fromTransferable(data)` factory constructors on all handle types: `SpscSender`, `SpscReceiver`, `MpscSender`, `MpscReceiver`, `MpmcSender`, `MpmcReceiver`, `BroadcastSender`, `BroadcastReceiver`, `OneShotSender`, `OneShotReceiver`.
+  - Reconstructed handles use `channelId = -1` to always route through the remote path (prevents registry collisions on the worker side).
+- **Platform Port Serialization** (`packPort` / `unpackPort`):
+  - New platform-agnostic functions following the same conditional-import pattern as `createReceiver()`.
+  - On VM: extracts/wraps raw `SendPort`. On Web: extracts/wraps raw `MessagePort`.
+- **Improved Documentation**:
+  - Added comprehensive `{@tool snippet}` examples to all channel classes.
+  - New standalone examples for each channel flavor in `example/`.
+- **Codecov Integration**:
+  - CI pipeline now automatically generates and uploads test coverage reports.
+
+### Usage
+
+```dart
+// Main thread — serialize for transfer
+final (tx, rx) = XChannel.spsc<String>(capacity: 128);
+final transferable = rx.toTransferable();
+
+// Worker/Isolate — reconstruct
+final remoteRx = SpscReceiver<String>.fromTransferable(transferable);
+await for (final msg in remoteRx.stream()) {
+  print(msg); // works across context boundary
+}
+```
+
+---
+
 ## [0.9.1] - 2026-02-27
 
 ### Fixed

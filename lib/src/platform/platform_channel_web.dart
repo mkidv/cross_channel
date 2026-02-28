@@ -7,6 +7,12 @@ import 'package:web/web.dart' as web;
 
 PlatformReceiver createPlatformReceiver() => _WebMessageReceiver();
 
+/// Extracts the raw [web.MessagePort] from a [PlatformPort] for postMessage transfer.
+Object packPlatformPort(PlatformPort port) => (port as _WebPort)._port;
+
+/// Wraps a received [web.MessagePort] back into a [PlatformPort].
+PlatformPort unpackPlatformPort(Object raw) => _WebPort(raw as web.MessagePort);
+
 /// A PlatformReceiver backed by a MessageChannel (or a single MessagePort).
 class _WebMessageReceiver implements PlatformReceiver {
   final web.MessageChannel _channel;
@@ -71,6 +77,12 @@ class _WebPort implements PlatformPort {
     if (message is _WebPort) {
       transferList.add(message._port);
       return message._port;
+    }
+
+    // ignore: invalid_runtime_check_with_js_interop_types
+    if (message is web.MessagePort) {
+      transferList.add(message);
+      return message;
     }
 
     if (message is List) {

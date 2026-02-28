@@ -13,6 +13,9 @@ final class SrswBuffer<T> implements ChannelBuffer<T> {
 
   late final List<T?> _buf;
   late final int _mask;
+
+  int get capacity => _mask + 1;
+
   int _head = 0, _tail = 0;
 
   Completer<void>? _spaceWaiter;
@@ -156,9 +159,7 @@ final class SrswBuffer<T> implements ChannelBuffer<T> {
       _head = (_head + 1) & _mask;
     }
     while (_notEmptyWaiters.isNotEmpty) {
-      _notEmptyWaiters
-          .removeFirst()
-          .completeError(StateError('Buffer cleared'));
+      _notEmptyWaiters.removeFirst().completeError(StateError('Buffer cleared'));
     }
   }
 

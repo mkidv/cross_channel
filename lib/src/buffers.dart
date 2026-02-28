@@ -19,9 +19,6 @@ abstract class ChannelBuffer<T> {
 
   bool tryPush(T v);
   T? tryPop();
-
-  /// Batch pop up to [max] items for high-throughput scenarios.
-  /// Returns empty list if buffer is empty.
   List<T> tryPopMany(int max);
 
   Future<void> waitNotEmpty();

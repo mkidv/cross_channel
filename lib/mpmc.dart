@@ -10,7 +10,41 @@ export 'src/result.dart';
 /// A tuple representing an MPMC channel (Sender, Receiver).
 typedef MpmcChannel<T> = (MpmcSender<T>, MpmcReceiver<T>);
 
-/// MPMC (Multiple-Producer Multiple-Consumer) channels
+/// MPMC (Multiple-Producer Multiple-Consumer) channels - Maximum flexibility for complex patterns.
+///
+/// The most general channel type supporting concurrent producers AND consumers.
+/// Messages are distributed among consumers using competitive consumption - each
+/// message is received by exactly one consumer (no broadcasting).
+///
+/// ## Core Characteristics
+/// - **Multiple producers**: Thread-safe concurrent sending
+/// - **Multiple consumers**: Competitive message consumption (not broadcast)
+/// - **FIFO ordering**: Messages maintain send order across all consumers
+/// - **Load balancing**: Work automatically distributed among available consumers
+/// - **Full cloning**: Both senders and receivers can be cloned
+/// - **Fair scheduling**: Consumers compete fairly for messages
+///
+/// ## When to Use MPMC
+/// - **Worker pools**: Multiple producers ↔ multiple worker consumers
+/// - **Load balancing**: Distribute work across multiple processors
+/// - **Pipeline stages**: Multi-stage processing with multiple workers per stage
+/// - **Distributed systems**: Multiple clients ↔ multiple servers
+/// - **Parallel processing**: Fan-out work distribution patterns
+/// - **Resource pools**: Multiple requesters ↔ multiple resource providers
+///
+/// ## Important: Competitive Consumption
+/// Unlike broadcast channels, each message goes to **exactly one consumer**.
+/// This enables load balancing but means consumers compete for messages.
+///
+/// ## Performance Considerations
+/// - **Coordination overhead**: Higher than MPSC due to consumer coordination
+/// - **Good throughput**: ~525-937ns per operation
+/// - **Latest-only mode**: Very fast for coalescing buffers
+/// - **Memory efficiency**: Shared buffer across all consumers
+///
+/// ## Example
+/// {@tool snippet example/mpmc_example.dart}
+/// {@end-tool}
 class Mpmc {
   static MpmcChannel<T> unbounded<T>({
     bool chunked = true,
@@ -23,10 +57,10 @@ class Mpmc {
       allowMultiReceivers: true,
       metricsId: metricsId,
     );
-    final tx = core.attachSender(
-        (c) => MpmcSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core
+        .attachSender((c) => MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     final rx = core.attachReceiver(
-        (c) => MpmcReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+        (c) => MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -35,19 +69,17 @@ class Mpmc {
       throw ArgumentError.value(capacity, 'capacity', 'Must be >= 0');
     }
 
-    final buf = (capacity == 0)
-        ? RendezvousBuffer<T>()
-        : BoundedBuffer<T>(capacity: capacity);
+    final buf = (capacity == 0) ? RendezvousBuffer<T>() : BoundedBuffer<T>(capacity: capacity);
     final core = StandardChannelCore<T>(
       buf,
       allowMultiSenders: true,
       allowMultiReceivers: true,
       metricsId: metricsId,
     );
-    final tx = core.attachSender(
-        (c) => MpmcSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core
+        .attachSender((c) => MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     final rx = core.attachReceiver(
-        (c) => MpmcReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+        (c) => MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -65,21 +97,19 @@ class Mpmc {
         : (capacity == 0)
             ? RendezvousBuffer<T>()
             : BoundedBuffer<T>(capacity: capacity);
-    final bool usePolicy =
-        capacity != null && capacity > 0 && policy != DropPolicy.block;
-    final ChannelBuffer<T> buf = usePolicy
-        ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop)
-        : inner;
+    final bool usePolicy = capacity != null && capacity > 0 && policy != DropPolicy.block;
+    final ChannelBuffer<T> buf =
+        usePolicy ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop) : inner;
     final core = StandardChannelCore<T>(
       buf,
       allowMultiSenders: true,
       allowMultiReceivers: true,
       metricsId: metricsId,
     );
-    final tx = core.attachSender(
-        (c) => MpmcSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core
+        .attachSender((c) => MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     final rx = core.attachReceiver(
-        (c) => MpmcReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+        (c) => MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -91,16 +121,23 @@ class Mpmc {
       allowMultiReceivers: true,
       metricsId: metricsId,
     );
-    final tx = core.attachSender(
-        (c) => MpmcSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core
+        .attachSender((c) => MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     final rx = core.attachReceiver(
-        (c) => MpmcReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+        (c) => MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 }
 
 final class MpmcSender<T> extends Sender<T> implements CloneableSender<T> {
   MpmcSender._(this.channelId, this.remotePort, {this.metricsId});
+
+  /// Reconstructs a remote-only sender from a transferable representation.
+  ///
+  /// Use with [toTransferable] to transfer a sender across Web Workers
+  /// or Isolates. The reconstructed sender always uses the remote path.
+  factory MpmcSender.fromTransferable(Map<String, Object?> data) =>
+      MpmcSender._(-1, unpackPort(data['port']!), metricsId: data['metricsId'] as String?);
 
   @override
   final String? metricsId;
@@ -134,16 +171,22 @@ final class MpmcSender<T> extends Sender<T> implements CloneableSender<T> {
     if (_closed) throw StateError('Sender closed');
     final local = ChannelRegistry.get(channelId);
     if (local is StandardChannelCore<T>) {
-      return local.attachSender(
-          (c) => MpmcSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+      return local
+          .attachSender((c) => MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     }
     return MpmcSender<T>._(channelId, remotePort, metricsId: metricsId);
   }
 }
 
-final class MpmcReceiver<T> extends Receiver<T>
-    implements CloneableReceiver<T> {
+final class MpmcReceiver<T> extends Receiver<T> implements CloneableReceiver<T> {
   MpmcReceiver._(this.channelId, this.remotePort, {this.metricsId});
+
+  /// Reconstructs a remote-only receiver from a transferable representation.
+  ///
+  /// Use with [toTransferable] to transfer a receiver across Web Workers
+  /// or Isolates. The reconstructed receiver always uses the remote path.
+  factory MpmcReceiver.fromTransferable(Map<String, Object?> data) =>
+      MpmcReceiver._(-1, unpackPort(data['port']!), metricsId: data['metricsId'] as String?);
 
   @override
   final String? metricsId;
@@ -195,7 +238,7 @@ final class MpmcReceiver<T> extends Receiver<T>
     final local = ChannelRegistry.get(channelId);
     if (local is StandardChannelCore<T>) {
       return local.attachReceiver(
-          (c) => MpmcReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+          (c) => MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     }
     return MpmcReceiver<T>._(channelId, remotePort, metricsId: metricsId);
   }

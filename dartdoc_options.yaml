@@ -1,0 +1,5 @@
+dartdoc:
+  tools:
+    snippet:
+      command: ["tool/snippet.dart"]
+      description: "Injects an external file as a Dart snippet."

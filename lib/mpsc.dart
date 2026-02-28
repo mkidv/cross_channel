@@ -11,6 +11,37 @@ export 'src/result.dart';
 typedef MpscChannel<T> = (MpscSender<T>, MpscReceiver<T>);
 
 /// MPSC (Multiple-Producer Single-Consumer) channels - The workhorse of concurrent systems.
+///
+/// The most versatile channel type for fan-in patterns where multiple producers
+/// send data to a single consumer. Combines thread-safety for concurrent producers
+/// with single-consumer optimizations for maximum throughput.
+///
+/// ## Core Strengths
+/// - **Thread-safe producers**: Multiple threads can send concurrently
+/// - **Single-consumer optimization**: No consumer-side coordination overhead
+/// - **Rich buffering strategies**: Unbounded, bounded, rendezvous, latest-only
+/// - **Advanced drop policies**: Handle backpressure with oldest/newest dropping
+/// - **Producer cloning**: Create multiple sender handles from one channel
+/// - **Flexible capacity**: From 0 (rendezvous) to unlimited (unbounded)
+///
+/// ## When to Use MPSC
+/// - **Event aggregation**: Multiple event sources ↔ single event loop
+/// - **Task queues**: Multiple workers ↔ single dispatcher
+/// - **Logging systems**: Multiple threads ↔ single log writer
+/// - **UI updates**: Multiple components ↔ single UI thread
+/// - **Data collection**: Multiple sensors ↔ single processor
+/// - **Request handling**: Multiple clients ↔ single server
+///
+/// ## Performance Characteristics
+/// - **Good throughput**: ~535-950ns per operation
+/// - **Latest-only mode**: Extremely fast ~7ns per operation for coalescing buffers
+/// - **Memory efficient**: Chunked buffers available for unbounded channels
+/// - **Scalable**: Designed to handle multiple concurrent producers
+/// - **Efficient design**: Optimized for producer-consumer scenarios
+///
+/// ## Example
+/// {@tool snippet example/mpsc_example.dart}
+/// {@end-tool}
 class Mpsc {
   static MpscChannel<T> unbounded<T>({
     bool chunked = true,
@@ -23,10 +54,10 @@ class Mpsc {
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx = core.attachSender(
-        (c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core
+        .attachSender((c) => MpscSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     final rx = core.attachReceiver(
-        (c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+        (c) => MpscReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -35,19 +66,17 @@ class Mpsc {
       throw ArgumentError.value(capacity, 'capacity', 'Must be >= 0');
     }
 
-    final buf = (capacity == 0)
-        ? RendezvousBuffer<T>()
-        : BoundedBuffer<T>(capacity: capacity);
+    final buf = (capacity == 0) ? RendezvousBuffer<T>() : BoundedBuffer<T>(capacity: capacity);
     final core = StandardChannelCore<T>(
       buf,
       allowMultiSenders: true,
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx = core.attachSender(
-        (c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core
+        .attachSender((c) => MpscSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     final rx = core.attachReceiver(
-        (c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+        (c) => MpscReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -65,21 +94,19 @@ class Mpsc {
         : (capacity == 0)
             ? RendezvousBuffer<T>()
             : BoundedBuffer<T>(capacity: capacity);
-    final bool usePolicy =
-        capacity != null && capacity > 0 && policy != DropPolicy.block;
-    final ChannelBuffer<T> buf = usePolicy
-        ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop)
-        : inner;
+    final bool usePolicy = capacity != null && capacity > 0 && policy != DropPolicy.block;
+    final ChannelBuffer<T> buf =
+        usePolicy ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop) : inner;
     final core = StandardChannelCore<T>(
       buf,
       allowMultiSenders: true,
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx = core.attachSender(
-        (c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core
+        .attachSender((c) => MpscSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     final rx = core.attachReceiver(
-        (c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+        (c) => MpscReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -91,16 +118,23 @@ class Mpsc {
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx = core.attachSender(
-        (c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+    final tx = core
+        .attachSender((c) => MpscSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     final rx = core.attachReceiver(
-        (c) => MpscReceiver<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+        (c) => MpscReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 }
 
 final class MpscSender<T> extends Sender<T> implements CloneableSender<T> {
   MpscSender._(this.channelId, this.remotePort, {this.metricsId});
+
+  /// Reconstructs a remote-only sender from a transferable representation.
+  ///
+  /// Use with [toTransferable] to transfer a sender across Web Workers
+  /// or Isolates. The reconstructed sender always uses the remote path.
+  factory MpscSender.fromTransferable(Map<String, Object?> data) =>
+      MpscSender._(-1, unpackPort(data['port']!), metricsId: data['metricsId'] as String?);
 
   @override
   final String? metricsId;
@@ -137,16 +171,22 @@ final class MpscSender<T> extends Sender<T> implements CloneableSender<T> {
     if (_closed) throw StateError('Sender closed');
     final local = ChannelRegistry.get(channelId);
     if (local is StandardChannelCore<T>) {
-      return local.attachSender(
-          (c) => MpscSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+      return local
+          .attachSender((c) => MpscSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     }
     return MpscSender<T>._(channelId, remotePort, metricsId: metricsId);
   }
 }
 
-final class MpscReceiver<T> extends Receiver<T>
-    implements KeepAliveReceiver<T> {
+final class MpscReceiver<T> extends Receiver<T> implements KeepAliveReceiver<T> {
   MpscReceiver._(this.channelId, this.remotePort, {this.metricsId});
+
+  /// Reconstructs a remote-only receiver from a transferable representation.
+  ///
+  /// Use with [toTransferable] to transfer a receiver across Web Workers
+  /// or Isolates. The reconstructed receiver always uses the remote path.
+  factory MpscReceiver.fromTransferable(Map<String, Object?> data) =>
+      MpscReceiver._(-1, unpackPort(data['port']!), metricsId: data['metricsId'] as String?);
 
   @override
   final String? metricsId;

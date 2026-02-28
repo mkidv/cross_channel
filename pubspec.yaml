@@ -1,6 +1,6 @@
 name: cross_channel
 description: High-performance & flexible channels for Dart/Flutter.
-version: 0.9.1
+version: 0.10.0
 repository: https://github.com/mkidv/cross_channel
 issue_tracker: https://github.com/mkidv/cross_channel/issues
 

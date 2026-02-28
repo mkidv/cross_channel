@@ -5,6 +5,12 @@ import 'package:cross_channel/src/platform/platform_channel.dart';
 
 PlatformReceiver createPlatformReceiver() => _IoReceiver();
 
+/// Returns the raw [SendPort] (natively serializable by [Isolate.spawn]).
+Object packPlatformPort(PlatformPort port) => (port as _IoPort)._sp;
+
+/// Wraps a raw [SendPort] back into a [PlatformPort].
+PlatformPort unpackPlatformPort(Object raw) => _IoPort(raw as SendPort);
+
 class _IoReceiver implements PlatformReceiver {
   final _rp = ReceivePort();
 

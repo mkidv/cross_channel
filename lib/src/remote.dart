@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/platform/platform.dart';
 import 'package:cross_channel/src/protocol.dart';
+import 'package:cross_channel/src/result.dart';
 
 /// Base remote connection for inter-isolate communication.
 ///
@@ -16,7 +17,7 @@ class RemoteConnection<T> {
   })  : _targetPort = targetPort,
         _localBuffer = localBuffer;
 
-  final PlatformPort _targetPort;
+  PlatformPort _targetPort;
   final ChannelBuffer<T>? _localBuffer;
   PlatformReceiver? _receiver;
   StreamSubscription<Object?>? _subscription;
@@ -46,25 +47,31 @@ class RemoteConnection<T> {
     if (_receiver != null) return;
     final rx = createReceiver();
     _receiver = rx;
-    _targetPort.send(ConnectRecvRequest(rx.sendPort));
-    _subscription = rx.messages.listen(onMessage);
+    _targetPort.send(ConnectRecvRequest(rx.sendPort, 0));
+    _subscription = rx.messages.asyncMap(onMessage).listen((_) {});
   }
 
   /// Override in subclasses to customize message handling.
-  void onMessage(Object? msg) {
+  Future<void> onMessage(Object? msg) async {
     final buf = _localBuffer;
     if (buf == null) return;
 
     if (msg is List<T>) {
       for (final v in msg) {
-        buf.tryPush(v);
+        while (!buf.tryPush(v)) {
+          await buf.waitNotFull();
+        }
       }
     } else if (msg is BatchMessage<T>) {
       for (final v in msg.values) {
-        buf.tryPush(v);
+        while (!buf.tryPush(v)) {
+          await buf.waitNotFull();
+        }
       }
     } else if (msg is T) {
-      buf.tryPush(msg);
+      while (!buf.tryPush(msg)) {
+        await buf.waitNotFull();
+      }
     } else if (msg is Disconnect) {
       close();
     }
@@ -83,6 +90,8 @@ class RemoteConnection<T> {
   void close() {
     if (_closed) return;
     _closed = true;
+
+    _localBuffer?.failAllPopWaiters(const RecvErrorDisconnected());
 
     try {
       _targetPort.send(const Disconnect());
@@ -103,9 +112,13 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
     required super.targetPort,
     required int initialCredits,
     required int creditBatchSize,
+    int? initialCreditsToSend,
+    PlatformPort? creditPort,
     super.localBuffer,
   })  : _credits = initialCredits,
         _creditBatchSize = creditBatchSize,
+        _initialCreditsToSend = initialCreditsToSend ?? 0,
+        _creditPort = creditPort,
         super._();
 
   static const defaultInitialCredits = 65536;
@@ -113,6 +126,7 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
   static const defaultBoundedCapacity = 65536;
 
   final int _creditBatchSize;
+  final int _initialCreditsToSend;
   int _credits;
   int _consumedSinceAck = 0;
   PlatformPort? _creditPort;
@@ -124,7 +138,7 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
 
   factory FlowControlledRemoteConnection.forSender(
     PlatformPort targetPort, {
-    int initialCredits = defaultInitialCredits,
+    int initialCredits = 0,
     int creditBatchSize = defaultCreditBatchSize,
   }) {
     final conn = FlowControlledRemoteConnection<T>._(
@@ -141,13 +155,28 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
     int capacity = defaultBoundedCapacity,
     int creditBatchSize = defaultCreditBatchSize,
     ChannelBuffer<T>? buffer,
+    PlatformPort? creditPort,
   }) {
     final buf = buffer ?? BoundedBuffer<T>(capacity: capacity);
+    int? cap;
+    if (buf is BoundedBuffer<T>) {
+      cap = buf.capacity;
+    } else if (buf is SrswBuffer<T>) {
+      cap = buf.capacity;
+    }
+
+    int initCredits = cap ?? defaultBoundedCapacity;
+    int batchSize = cap != null && cap > 1 ? cap ~/ 2 : (cap == 1 ? 1 : creditBatchSize);
+    if (initCredits == 0) initCredits = 1;
+    if (batchSize == 0) batchSize = 1;
+
     final conn = FlowControlledRemoteConnection<T>._(
       targetPort: targetPort,
       initialCredits: 0,
-      creditBatchSize: creditBatchSize,
+      creditBatchSize: batchSize,
+      initialCreditsToSend: initCredits,
       localBuffer: buf,
+      creditPort: creditPort,
     );
     conn._initReceiverListener();
     return conn;
@@ -156,10 +185,22 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
   void _initSenderListener() {
     final rx = createReceiver();
     _receiver = rx;
-    _targetPort.send(ConnectSenderRequest(rx.sendPort));
+    _targetPort.send(ConnectSenderRequest(rx.sendPort).toTransferable());
 
     _subscription = rx.messages.listen((msg) {
-      if (msg is FlowCredit) {
+      if (msg is Map) {
+        final ctrl = ControlMessage.fromTransferable(msg);
+        if (ctrl != null) msg = ctrl;
+      }
+
+      if (msg is ConnectRecvRequest) {
+        _targetPort = msg.replyPort; // Switch to the dedicated endpoint
+
+        _credits += msg.initialCredits;
+        _flushPending();
+        _creditWaiter?.complete();
+        _creditWaiter = null;
+      } else if (msg is FlowCredit) {
         _credits += msg.credits;
         _flushPending();
         _creditWaiter?.complete();
@@ -173,13 +214,17 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
   void _initReceiverListener() {
     final rx = createReceiver();
     _receiver = rx;
-    _targetPort.send(ConnectRecvRequest(rx.sendPort));
-    _targetPort.send(FlowCredit(defaultInitialCredits));
-    _subscription = rx.messages.listen(onMessage);
+    _targetPort.send(ConnectRecvRequest(rx.sendPort, _initialCreditsToSend).toTransferable());
+    _subscription = rx.messages.asyncMap(onMessage).listen((_) {});
   }
 
   @override
-  void onMessage(Object? msg) {
+  Future<void> onMessage(Object? msg) async {
+    if (msg is Map) {
+      final ctrl = ControlMessage.fromTransferable(msg);
+      if (ctrl != null) msg = ctrl;
+    }
+
     if (msg is FlowCredit) {
       _credits += msg.credits;
       _flushPending();
@@ -194,7 +239,7 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
     if (msg is ConnectSenderRequest) {
       _creditPort = msg.replyPort;
       if (_pendingAcks > 0) {
-        _creditPort!.send(FlowCredit(_pendingAcks));
+        _creditPort!.send(FlowCredit(_pendingAcks).toTransferable());
         _pendingAcks = 0;
       }
       return;
@@ -205,12 +250,16 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
     if (msg is List) {
       for (final v in msg) {
         if (v is T) {
-          buf.tryPush(v);
+          while (!buf.tryPush(v)) {
+            await buf.waitNotFull();
+          }
           received++;
         }
       }
     } else if (msg is T) {
-      buf.tryPush(msg);
+      while (!buf.tryPush(msg)) {
+        await buf.waitNotFull();
+      }
       received = 1;
     } else if (msg is Disconnect) {
       close();
@@ -220,7 +269,7 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
     _consumedSinceAck += received;
     if (_consumedSinceAck >= _creditBatchSize) {
       if (_creditPort != null) {
-        _creditPort!.send(FlowCredit(_consumedSinceAck));
+        _creditPort!.send(FlowCredit(_consumedSinceAck).toTransferable());
       } else {
         _pendingAcks += _consumedSinceAck;
       }

@@ -16,4 +16,9 @@ jobs:
       - run: dart pub get
       - run: dart format --output=none --set-exit-if-changed .
       - run: dart analyze --fatal-infos
-      - run: dart test
+      - run: dart pub global activate coverage
+      - run: dart run tool/coverage.dart
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage/lcov.info

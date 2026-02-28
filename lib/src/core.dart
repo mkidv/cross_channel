@@ -59,66 +59,71 @@ abstract class ChannelCore<T, Self extends Object>
 
   /// Create a PlatformReceiver for remote interactions (lazy loaded).
   /// This receiver is used to receive messages from remote Isolates/Workers.
-  PlatformReceiver? _remoteReceiver;
   final _connectedSenders = <FlowControlledRemoteConnection<T>>[];
   int _activeProxyLoops = 0;
 
-  PlatformPort get sendPort {
-    if (_remoteReceiver == null) {
-      final rx = createReceiver();
-      _remoteReceiver = rx;
-      rx.messages.listen((msg) {
-        if (msg is T) {
-          buf.tryPush(msg);
-        } else if (msg is List) {
-          for (final v in msg) {
-            if (v is T) buf.tryPush(v);
-          }
-        } else if (msg is ConnectRecvRequest) {
-          _handleConnectRecvRequest(msg);
-        } else if (msg is ConnectSenderRequest) {
-          _handleConnectSenderRequest(msg);
-        } else if (msg is FlowCredit) {
-          for (final c in _connectedSenders) {
-            c.handleRemoteMessage(msg);
-          }
+  PlatformPort createRemotePort() {
+    final rx = createReceiver();
+    rx.messages.listen((msg) {
+      if (msg is Map) {
+        final ctrl = ControlMessage.fromTransferable(msg);
+        if (ctrl != null) msg = ctrl;
+      }
+
+      if (msg is T) {
+        buf.tryPush(msg);
+      } else if (msg is List) {
+        for (final v in msg) {
+          if (v is T) buf.tryPush(v);
         }
-        if (!buf.isEmpty) buf.wakeAllPushWaiters();
-      });
-    }
-    return _remoteReceiver!.sendPort;
+      } else if (msg is ConnectRecvRequest) {
+        _handleConnectRecvRequest(msg);
+      } else if (msg is ConnectSenderRequest) {
+        _handleConnectSenderRequest(msg);
+      } else if (msg is FlowCredit) {
+        for (final c in _connectedSenders) {
+          c.handleRemoteMessage(msg);
+        }
+      }
+      if (!buf.isEmpty) buf.wakeAllPushWaiters();
+    });
+    return rx.sendPort;
   }
 
   void _handleConnectRecvRequest(ConnectRecvRequest req) {
     // Determine if we can accept a new receiver
     if (!allowMultiReceivers && _activeProxyLoops > 0) {
       // Reject connection
-      req.replyPort.send(const Disconnect());
+      req.replyPort.send(const Disconnect().toTransferable());
       return;
     }
-    _spawnProxyLoop(req.replyPort);
+    _spawnProxyLoop(req.replyPort, initialCredits: req.initialCredits);
   }
 
   void _handleConnectSenderRequest(ConnectSenderRequest req) {
     // Basic multi-sender check
     if (!allowMultiSenders && _connectedSenders.isNotEmpty) {
       // Reject connection
-      req.replyPort.send(const Disconnect());
+      req.replyPort.send(const Disconnect().toTransferable());
       return;
     }
 
     final conn = FlowControlledRemoteConnection<T>.forReceiver(
       req.replyPort,
       buffer: buf,
+      creditPort: req.replyPort,
     );
     _connectedSenders.add(conn);
     // Note: cleanup of _connectedSenders would require monitoring conn closure
   }
 
-  Future<void> _spawnProxyLoop(PlatformPort remotePort) async {
+  Future<void> _spawnProxyLoop(PlatformPort remotePort, {int initialCredits = 0}) async {
     _activeProxyLoops++;
     const batchSize = 64;
-    final conn = FlowControlledRemoteConnection<T>.forSender(remotePort);
+    final conn = FlowControlledRemoteConnection<T>.forSender(
+      remotePort,
+      initialCredits: initialCredits,
+    );
 
     // Broadcast specialization: each remote subscriber needs its own cursor
     final ring = buf is BroadcastRing<T> ? buf as BroadcastRing<T> : null;
@@ -183,8 +188,7 @@ abstract class ChannelCore<T, Self extends Object>
 
 /// Standard generic implementation of [ChannelCore].
 ///
-final class StandardChannelCore<T>
-    extends ChannelCore<T, StandardChannelCore<T>> {
+final class StandardChannelCore<T> extends ChannelCore<T, StandardChannelCore<T>> {
   StandardChannelCore(
     this.buf, {
     required this.allowMultiSenders,
@@ -239,8 +243,7 @@ abstract class Sender<T> with ChannelSendOps<T> {
   @override
   FlowControlledRemoteConnection<T>? get remoteConnection {
     if (localSendChannel != null) return null;
-    return _cachedConn ??=
-        _senderConnections[this] as FlowControlledRemoteConnection<T>?;
+    return _cachedConn ??= _senderConnections[this] as FlowControlledRemoteConnection<T>?;
   }
 
   /// Ensures connection is established for remote interactions
@@ -294,6 +297,20 @@ abstract class Sender<T> with ChannelSendOps<T> {
   /// The buffer is unused by Sender when using remotePort.
   @override
   ChannelBuffer<T>? get buf => null;
+
+  /// Converts this sender to a platform-agnostic transferable representation.
+  ///
+  /// On VM: the returned Map contains a raw [SendPort] (auto-serialized
+  /// by [Isolate.spawn]).
+  /// On Web: the returned Map contains a raw [MessagePort] (must be in
+  /// the postMessage transfer list).
+  ///
+  /// The reconstructed sender will always use the remote path, since the
+  /// [ChannelCore] stays in the original context.
+  Map<String, Object?> toTransferable() => {
+        'port': packPort(remotePort),
+        if (metricsId != null) 'metricsId': metricsId,
+      };
 }
 
 /// A handle to a channel's receiving side.
@@ -318,6 +335,7 @@ abstract class Receiver<T> with ChannelRecvOps<T> {
   }
 
   /// The PlatformPort to communicate with the channel.
+  @override
   PlatformPort get remotePort;
 
   String? get metricsId => null;
@@ -329,26 +347,49 @@ abstract class Receiver<T> with ChannelRecvOps<T> {
   @override
   bool get isRecvClosed => false;
 
+  FlowControlledRemoteConnection<T>? _cachedConn;
+
+  @pragma('vm:prefer-inline')
+  @override
+  FlowControlledRemoteConnection<T>? get remoteConnection {
+    if (localRecvChannel != null) return null;
+    return _cachedConn ??= _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
+  }
+
   /// Gets the remote buffer, initializing connection via Expando if needed.
   @override
   ChannelBuffer<T> get buf {
-    // If we have a stored connection in Expando, use its buffer
-    var conn = _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
+    var conn = remoteConnection;
     if (conn != null) return conn.buffer!;
 
     // Otherwise, create new connection and store it
     conn = FlowControlledRemoteConnection<T>.forReceiver(remotePort);
     _receiverConnections[this] = conn;
+    _cachedConn = conn;
     return conn.buffer!;
   }
 
   /// Closes the remote connection if active.
   void closeRemote() {
-    final conn =
-        _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
+    final conn = remoteConnection;
     conn?.close();
     _receiverConnections[this] = null;
+    _cachedConn = null;
   }
+
+  /// Converts this receiver to a platform-agnostic transferable representation.
+  ///
+  /// On VM: the returned Map contains a raw [SendPort] (auto-serialized
+  /// by [Isolate.spawn]).
+  /// On Web: the returned Map contains a raw [MessagePort] (must be in
+  /// the postMessage transfer list).
+  ///
+  /// The reconstructed receiver will always use the remote path, since the
+  /// [ChannelCore] stays in the original context.
+  Map<String, Object?> toTransferable() => {
+        'port': packPort(remotePort),
+        if (metricsId != null) 'metricsId': metricsId,
+      };
 }
 
 abstract class KeepAliveSender<T> extends Sender<T> implements Closeable {}

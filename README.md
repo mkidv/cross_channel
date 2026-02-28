@@ -8,6 +8,9 @@
   <a href="https://pub.dev/packages/cross_channel/score">
     <img alt="pub points" src="https://img.shields.io/pub/points/cross_channel">
   </a>
+  <a href="https://codecov.io/gh/mkidv/cross_channel">
+    <img alt="codecov" src="https://codecov.io/gh/mkidv/cross_channel/graph/badge.svg">
+  </a>
   <a href="https://github.com/mkidv/cross_channel/actions">
     <img alt="CI" src="https://github.com/mkidv/cross_channel/actions/workflows/dart.yml/badge.svg">
   </a>
@@ -25,6 +28,7 @@ A complete concurrency toolkit providing Rust-style synchronization primitives: 
 ## ✨ Features
 
 - **Universal Handles**: Transparent zero-overhead local optimization with native cross-isolate support (just pass the channel to `Isolate.spawn`).
+- **Transferable Handles**: Serialize any `Sender`/`Receiver` for Web Worker `postMessage` transfer with `toTransferable()`/`fromTransferable()`.
 - **Broadcast Ring**: Single-Producer Multi-Consumer (SPMC) ring buffer with publisher history replay and lag detection for slow subscribers.
 - **Select (`XSelect`)**: Macro-like multiplexing over Futures, Streams, Timers, and Channels with non-blocking fast paths and loser cancellation.
 - **Rich Topology**: Multi-producer / multi-consumer topologies with drop policies (`block`, `oldest`, `newest`) and backpressure (`capacity=0` rendezvous).
@@ -452,6 +456,30 @@ final res = await channel.port1.request<String>('ping');
 // Port → channel bridge
 final (tx, rx) = channel.port2.toMpmc<JsEvent>(capacity: 512, strict: true);
 ```
+
+### Transferable Handles (Web Workers)
+
+Serialize any `Sender` or `Receiver` for transfer across Web Workers via `postMessage` (or Isolates).
+The `ChannelCore` stays on the main thread — the worker gets a lightweight remote handle.
+
+```dart
+import 'package:cross_channel/cross_channel.dart';
+
+// Main thread — create channel and serialize the receiver
+final (tx, rx) = XChannel.spsc<String>(capacity: 128);
+final transferable = rx.toTransferable();
+// Pass `transferable` to the worker via postMessage/Squadron payload
+
+// Worker side — reconstruct from the transferred data
+final remoteRx = SpscReceiver<String>.fromTransferable(transferable);
+await for (final msg in remoteRx.stream()) {
+  print(msg); // receives messages from main thread
+}
+```
+
+Works with all channel types: `SpscSender/Receiver`, `MpscSender/Receiver`, `MpmcSender/Receiver`, `BroadcastSender/Receiver`, `OneShotSender/Receiver`.
+
+> **Note:** On web, the raw `MessagePort` inside the map must be included in the `postMessage` transfer list. Frameworks like Squadron support this via `inspectRequest`.
 
 ## 🧩 Results & helpers
 

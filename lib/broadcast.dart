@@ -24,6 +24,10 @@ typedef BroadcastChannel<T> = (BroadcastSender<T>, Broadcast<T>);
 /// Best suited for:
 /// - High-frequency local event buses (UI events, telemetry).
 /// - Scenarios where slow consumers should not block the producer.
+///
+/// ## Example
+/// {@tool snippet example/broadcast_example.dart}
+/// {@end-tool}
 final class Broadcast<T> {
   final BroadcastRing<T> _buffer;
   final int _channelId;
@@ -42,7 +46,7 @@ final class Broadcast<T> {
       metricsId: metricsId,
     );
     final tx = core.attachSender(
-        (c) => BroadcastSender<T>._(c.id, c.sendPort, metricsId: c.metricsId));
+        (c) => BroadcastSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     final broadcast = Broadcast<T>._(buffer, core.id);
     return (tx, broadcast);
   }
@@ -54,13 +58,17 @@ final class Broadcast<T> {
   BroadcastReceiver<T> subscribe({int replay = 0}) {
     final core = ChannelRegistry.get(_channelId)! as StandardChannelCore<T>;
     return core.attachReceiver((c) => BroadcastReceiver<T>._(
-        c.id, c.sendPort, _buffer, replay,
+        c.id, c.createRemotePort(), _buffer, replay,
         metricsId: c.metricsId));
   }
 }
 
 final class BroadcastSender<T> extends Sender<T> implements KeepAliveSender<T> {
   BroadcastSender._(this.channelId, this.remotePort, {this.metricsId});
+
+  /// Reconstructs a remote-only sender from a transferable representation.
+  factory BroadcastSender.fromTransferable(Map<String, Object?> data) =>
+      BroadcastSender._(-1, unpackPort(data['port']!), metricsId: data['metricsId'] as String?);
 
   @override
   final int channelId;
@@ -93,16 +101,25 @@ final class BroadcastSender<T> extends Sender<T> implements KeepAliveSender<T> {
   }
 }
 
-final class BroadcastReceiver<T> extends Receiver<T>
-    implements KeepAliveReceiver<T> {
-  BroadcastReceiver._(
-      this.channelId, this.remotePort, BroadcastRing<T> buffer, int replay,
+final class BroadcastReceiver<T> extends Receiver<T> implements KeepAliveReceiver<T> {
+  BroadcastReceiver._(this.channelId, this.remotePort, BroadcastRing<T> buffer, int replay,
       {this.metricsId}) {
     // Initialize cursor in the buffer.
     // Note: We don't store [buffer] to allow BroadcastReceiver to be sent across Isolates.
     // Ideally, the cursor itself should be sendable (it is).
     _cursor = buffer.addSubscriber(replay);
   }
+
+  /// Reconstructs a remote-only receiver from a transferable representation.
+  ///
+  /// The receiver connects via the remote path and receives messages through
+  /// the proxy loop on the [ChannelCore] side.
+  BroadcastReceiver._remote(this.channelId, this.remotePort, {this.metricsId});
+
+  /// Reconstructs a remote-only receiver from a transferable representation.
+  factory BroadcastReceiver.fromTransferable(Map<String, Object?> data) =>
+      BroadcastReceiver._remote(-1, unpackPort(data['port']!),
+          metricsId: data['metricsId'] as String?);
 
   @override
   final int channelId;
@@ -112,7 +129,8 @@ final class BroadcastReceiver<T> extends Receiver<T>
   final String? metricsId;
 
   /// Opaque cursor handle managed by the buffer.
-  late final Object _cursor;
+  /// Null for remote-only receivers (no local buffer).
+  Object? _cursor;
 
   bool _closed = false;
 
@@ -147,7 +165,7 @@ final class BroadcastReceiver<T> extends Receiver<T>
       // Local fast path: access buffer directly
       final ring = lc.buf as BroadcastRing<T>;
       final t0 = mx.startRecvTimer();
-      final res = await ring.receive(_cursor);
+      final res = await ring.receive(_cursor!);
       if (res.hasValue) {
         mx.recvOk(t0);
       }
@@ -163,7 +181,7 @@ final class BroadcastReceiver<T> extends Receiver<T>
     if (lc != null) {
       final ring = lc.buf as BroadcastRing<T>;
       final t0 = mx.startRecvTimer();
-      final res = ring.tryReceive(_cursor);
+      final res = ring.tryReceive(_cursor!);
       if (res.hasValue) {
         mx.tryRecvOk(t0);
       } else if (res.isEmpty) {
@@ -181,7 +199,7 @@ final class BroadcastReceiver<T> extends Receiver<T>
 
     final lc = localRecvChannel;
     if (lc != null) {
-      (lc.buf as BroadcastRing<T>).removeSubscriber(_cursor);
+      (lc.buf as BroadcastRing<T>).removeSubscriber(_cursor!);
     }
 
     closeRemote();

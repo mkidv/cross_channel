@@ -30,7 +30,7 @@ Future<void> main(List<String> args) async {
   );
 
   await benchCrossIsolatePipeline(
-      Spsc.channel<int>(1024, metricsId: 'spsc_cross_iso'), iters);
+      Spsc.channel<int>(1024, metricsId: 'cross-isolate pipeline 1024'), iters);
 
   MetricsRegistry().export();
   exit(0);
