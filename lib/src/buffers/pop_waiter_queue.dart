@@ -101,6 +101,7 @@ final class PopWaiterQueue<T> {
   /// Clears all state.
   void clear() {
     _fastWaiter = null;
+    _popWaiters.clear(); // Ensure waiters are cleared
     while (_notEmptyWaiters.isNotEmpty) {
       _notEmptyWaiters
           .removeFirst()

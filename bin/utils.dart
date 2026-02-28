@@ -217,9 +217,19 @@ Future<void> benchCrossIsolatePipeline(Channel<int> ch, int iters) async {
     }
   }, senderDone.sendPort);
 
-  // Wait for both to finish
-  final results = await Future.wait([receiverDone.first, senderDone.first]);
-  for (final res in results) {
+  // Wait for sender to finish first
+  final senderRes = await senderDone.first;
+
+  // Close the local anchors so the channel knows it's disconnected
+  // This is required for lossy channels (like Broadcast) where the
+  // receiver might not receive exactly `iters` messages and relies on disconnect.
+  if (tx is Closeable) (tx as Closeable).close();
+
+  // Wait for receiver to finish
+  final receiverRes = await receiverDone.first;
+
+  // Merge metrics
+  for (final res in [receiverRes, senderRes]) {
     if (res is (int, GlobalMetrics)) {
       MetricsRegistry().merge(res.$2);
     }

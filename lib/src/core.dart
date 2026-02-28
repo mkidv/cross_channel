@@ -338,7 +338,6 @@ abstract class Receiver<T> with ChannelRecvOps<T> {
   }
 
   /// The PlatformPort to communicate with the channel.
-  @override
   PlatformPort get remotePort;
 
   String? get metricsId => null;
@@ -350,35 +349,25 @@ abstract class Receiver<T> with ChannelRecvOps<T> {
   @override
   bool get isRecvClosed => false;
 
-  FlowControlledRemoteConnection<T>? _cachedConn;
-
-  @pragma('vm:prefer-inline')
-  @override
-  FlowControlledRemoteConnection<T>? get remoteConnection {
-    if (localRecvChannel != null) return null;
-    return _cachedConn ??=
-        _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
-  }
-
   /// Gets the remote buffer, initializing connection via Expando if needed.
   @override
   ChannelBuffer<T> get buf {
-    var conn = remoteConnection;
+    // If we have a stored connection in Expando, use its buffer
+    var conn = _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
     if (conn != null) return conn.buffer!;
 
     // Otherwise, create new connection and store it
     conn = FlowControlledRemoteConnection<T>.forReceiver(remotePort);
     _receiverConnections[this] = conn;
-    _cachedConn = conn;
     return conn.buffer!;
   }
 
   /// Closes the remote connection if active.
   void closeRemote() {
-    final conn = remoteConnection;
+    final conn =
+        _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
     conn?.close();
     _receiverConnections[this] = null;
-    _cachedConn = null;
   }
 
   /// Converts this receiver to a platform-agnostic transferable representation.

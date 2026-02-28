@@ -27,6 +27,21 @@
   - New standalone examples for each channel flavor in `example/`.
 - **Codecov Integration**:
   - CI pipeline now automatically generates and uploads test coverage reports.
+- **Test Coverage (75.9%)**:
+  - Added full suite of unit tests for the `metrics` module (Registry, Recorders, Exporters, P2 Quantiles).
+  - Added missing core buffer tests (`UnboundedBuffer`, `LatestOnlyBuffer`) and remote protocol tests (`RemoteConnection`, Flow Control).
+
+### Changed
+
+- **Performance & Backpressure** (`FlowControlledRemoteConnection`):
+  - Eliminated secondary `ListQueue` buffering for pending network sends.
+  - `send()` and `sendBatch()` now aggressively yield and await network credits natively, providing strictly enforced, zero-allocation backpressure down to the caller without double-buffering.
+  - DRY refactoring of remote connection setup logic, preventing resource leaks.
+
+### Fixed
+
+- **Broadcast Channel Disconnections**: Fixed an infinite hang in cross-isolate broadcast pipelines caused by failure to propagate `RecvErrorDisconnected` when underlying platform connections closed.
+- **Worker Handshake Protocol**: Fixed an edge-case bug where `PlatformReceiver` listeners failed to decode `ControlMessage` payloads wrapped inside untyped maps generically transferred from Web Workers.
 
 ### Usage
 

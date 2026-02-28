@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cross_channel/spsc.dart';
 import 'package:cross_channel/src/metrics.dart';
@@ -24,6 +25,8 @@ Future<void> main() async {
   print('\n--- TRY SEND/RECV (No metrics, sync) ---');
   MetricsConfig.enabled = false;
   await runBenchSync(iters);
+
+  exit(0);
 }
 
 Future<void> runBenchSync(int iters) async {

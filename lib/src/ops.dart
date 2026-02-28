@@ -153,14 +153,13 @@ mixin ChannelRecvOps<T> {
         : null;
   }
 
-  PlatformPort? get remotePort => null;
   FlowControlledRemoteConnection<T>? get remoteConnection => null;
 
   /// Whether the channel's receive side is disconnected.
   bool get recvDisconnected {
     if (isRecvClosed) return true;
-    if (remoteConnection?.isClosed ?? false) return true;
     if (localRecvChannel case final lc?) return lc.recvDisconnected;
+    if (remoteConnection?.isClosed ?? false) return buf.isEmpty;
     return false;
   }
 
@@ -182,9 +181,11 @@ mixin ChannelRecvOps<T> {
       return RecvOk<T>(v0);
     }
 
+    if (recvDisconnected) return const RecvErrorDisconnected();
+
     while (true) {
       final c = buf.addPopWaiter();
-      if (isRecvClosed) {
+      if (recvDisconnected) {
         buf.removePopWaiter(c);
         return const RecvErrorDisconnected();
       }
@@ -210,6 +211,9 @@ mixin ChannelRecvOps<T> {
       mx.tryRecvOk(t0);
       return RecvOk<T>(v0);
     }
+
+    if (recvDisconnected) return const RecvErrorDisconnected();
+
     mx.tryRecvEmpty();
     return const RecvErrorEmpty();
   }
@@ -222,7 +226,7 @@ mixin ChannelRecvOps<T> {
     if (v0 != null) {
       return (Future.value(RecvOk<T>(v0)), _noop);
     }
-    if (isRecvClosed) {
+    if (recvDisconnected) {
       return (Future.value(const RecvErrorDisconnected()), _noop);
     }
 

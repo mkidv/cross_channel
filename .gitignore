@@ -21,3 +21,8 @@ WARP.md
 
 # Bench
 bench/
+
+# Coverage
+coverage/
+cov.dart
+cov_report.txt
