@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cross_channel/mpmc.dart';
 
 Future<void> main() async {
@@ -8,10 +10,10 @@ Future<void> main() async {
   // 2. Multiple Job Producers
   for (int i = 0; i < 2; i++) {
     final producer = taskTx.clone();
-    Future.microtask(() async {
+    unawaited(Future.microtask(() async {
       await producer.send('Task from Producer $i');
       producer.close();
-    });
+    }));
   }
   taskTx.close();
 

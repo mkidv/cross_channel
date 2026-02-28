@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cross_channel/broadcast.dart';
 
 Future<void> main() async {
@@ -9,22 +11,22 @@ Future<void> main() async {
   final sub2 = broadcast.subscribe();
 
   // 3. Publisher
-  Future.microtask(() async {
+  unawaited(Future.microtask(() async {
     await tx.send('System Update Available');
     await tx.send('Battery Low');
     tx.close();
-  });
+  }));
 
   // 4. Consumers receive the SAME messages concurrently
-  Future.microtask(() async {
+  unawaited(Future.microtask(() async {
     await for (final msg in sub1.stream()) {
       print('UI Component 1 received: $msg');
     }
-  });
+  }));
 
-  Future.microtask(() async {
+  unawaited(Future.microtask(() async {
     await for (final msg in sub2.stream()) {
       print('UI Component 2 received: $msg');
     }
-  });
+  }));
 }

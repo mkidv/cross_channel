@@ -9,8 +9,8 @@ Future<void> main() async {
   final networkTx = eventTx.clone();
 
   // Send from different sources concurrently
-  userTx.send('User clicked button');
-  networkTx.send('Data downloaded');
+  await userTx.send('User clicked button');
+  await networkTx.send('Data downloaded');
 
   // Close when done
   userTx.close();

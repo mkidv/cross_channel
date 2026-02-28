@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cross_channel/oneshot.dart';
 
 Future<void> main() async {
@@ -6,10 +8,10 @@ Future<void> main() async {
   final (responseTx, responseRx) = OneShot.channel<String>(consumeOnce: true);
 
   // 2. Server Side (Promise resolution)
-  Future.microtask(() async {
+  unawaited(Future.microtask(() async {
     // Send exactly one response
     await responseTx.send('Operation completed successfully');
-  });
+  }));
 
   // 3. Client Side
   final result = await responseRx.recv();

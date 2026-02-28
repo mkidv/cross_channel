@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cross_channel/spsc.dart';
 
 Future<void> main() async {
@@ -13,7 +15,7 @@ Future<void> main() async {
     tx.close(); // Graceful shutdown
   }
 
-  produceEvents();
+  unawaited(produceEvents());
 
   // 3. Single Consumer
   await for (final value in rx.stream()) {
