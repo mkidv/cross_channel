@@ -159,7 +159,9 @@ final class SrswBuffer<T> implements ChannelBuffer<T> {
       _head = (_head + 1) & _mask;
     }
     while (_notEmptyWaiters.isNotEmpty) {
-      _notEmptyWaiters.removeFirst().completeError(StateError('Buffer cleared'));
+      _notEmptyWaiters
+          .removeFirst()
+          .completeError(StateError('Buffer cleared'));
     }
   }
 

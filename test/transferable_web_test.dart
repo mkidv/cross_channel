@@ -17,7 +17,8 @@ import 'utils.dart';
 /// Simulates sending a transferable Map through postMessage and receiving it
 /// on the other side, just like a Web Worker would. The raw MessagePort
 /// is placed in the transfer list so ownership moves to the receiver.
-Future<Map<String, Object?>> simulatePostMessageTransfer(Map<String, Object?> data) async {
+Future<Map<String, Object?>> simulatePostMessageTransfer(
+    Map<String, Object?> data) async {
   final mc = web.MessageChannel();
   final completer = Completer<Map<String, Object?>>();
 
@@ -260,7 +261,8 @@ void main() {
         // Transfer tx1 to "worker"
         final data1 = tx1.toTransferable();
         final received1 = await simulatePostMessageTransfer(data1);
-        final remoteTx1 = SpscSender<Map<Object?, Object?>>.fromTransferable(received1);
+        final remoteTx1 =
+            SpscSender<Map<Object?, Object?>>.fromTransferable(received1);
 
         // Through remoteTx1, send tx2 (serialized)
         final data2 = tx2.toTransferable();
@@ -272,7 +274,8 @@ void main() {
         final received2 = res.valueOrNull!.cast<String, Object?>();
 
         // Reconstruct tx2 and use it
-        final remoteTx2 = MpscSender<String>.fromTransferable(received2.cast<String, Object?>());
+        final remoteTx2 = MpscSender<String>.fromTransferable(
+            received2.cast<String, Object?>());
         unawaited(remoteTx2.send('nested hello'));
 
         // rx2 should receive it
@@ -281,7 +284,8 @@ void main() {
         expect(res2.valueOrNull, 'nested hello');
       });
 
-      test('Flow Control: Remote Sender blocks when buffer + burst is exceeded', () async {
+      test('Flow Control: Remote Sender blocks when buffer + burst is exceeded',
+          () async {
         // We use a small bounded channel.
         // Initial burst is 32 credits.
         final (tx, rx) = Mpsc.bounded<int>(32);
@@ -300,7 +304,8 @@ void main() {
         final fut = remoteTx.send(64).then((_) => sixtyFifthSent = true);
 
         await tick(10);
-        expect(sixtyFifthSent, isFalse, reason: 'Sender should be blocked by flow control');
+        expect(sixtyFifthSent, isFalse,
+            reason: 'Sender should be blocked by flow control');
 
         // Drain several items to trigger a credit batch (16 items)
         for (var i = 0; i < 16; i++) {
@@ -310,10 +315,13 @@ void main() {
         // Give time for FlowCredit to arrive and sender to unblock
         await tick(10);
         await fut;
-        expect(sixtyFifthSent, isTrue, reason: 'Sender should unblock after receiving FlowCredit');
+        expect(sixtyFifthSent, isTrue,
+            reason: 'Sender should unblock after receiving FlowCredit');
       });
 
-      test('Disconnection Propagation: Remote close triggers local disconnected', () async {
+      test(
+          'Disconnection Propagation: Remote close triggers local disconnected',
+          () async {
         final (tx, rx) = Spsc.channel<int>(64);
 
         final data = tx.toTransferable();

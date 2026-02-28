@@ -44,9 +44,12 @@ class OneShot {
     bool consumeOnce = false,
     String? metricsId,
   }) {
-    final core = _OneShotCore<T>(consumeOnce: consumeOnce, metricsId: metricsId);
-    final tx = core.attachSender((c) => OneShotSender<T>._(c.id, c.createRemotePort()));
-    final rx = core.attachReceiver((c) => OneShotReceiver<T>._(c.id, c.createRemotePort()));
+    final core =
+        _OneShotCore<T>(consumeOnce: consumeOnce, metricsId: metricsId);
+    final tx = core
+        .attachSender((c) => OneShotSender<T>._(c.id, c.createRemotePort()));
+    final rx = core.attachReceiver(
+        (c) => OneShotReceiver<T>._(c.id, c.createRemotePort()));
     return (tx, rx);
   }
 }

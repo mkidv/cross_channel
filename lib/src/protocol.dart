@@ -17,9 +17,10 @@ sealed class ControlMessage {
     final type = map['#cc'];
 
     return switch (type) {
-      'ConnectRecvRequest' =>
-        ConnectRecvRequest(unpackPort(map['replyPort']!), map['initialCredits']! as int),
-      'ConnectSenderRequest' => ConnectSenderRequest(unpackPort(map['replyPort']!)),
+      'ConnectRecvRequest' => ConnectRecvRequest(
+          unpackPort(map['replyPort']!), map['initialCredits']! as int),
+      'ConnectSenderRequest' =>
+        ConnectSenderRequest(unpackPort(map['replyPort']!)),
       'ConnectOk' => const ConnectOk(),
       'Disconnect' => const Disconnect(),
       'FlowCredit' => FlowCredit(map['credits']! as int),

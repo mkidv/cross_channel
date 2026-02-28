@@ -117,7 +117,8 @@ abstract class ChannelCore<T, Self extends Object>
     // Note: cleanup of _connectedSenders would require monitoring conn closure
   }
 
-  Future<void> _spawnProxyLoop(PlatformPort remotePort, {int initialCredits = 0}) async {
+  Future<void> _spawnProxyLoop(PlatformPort remotePort,
+      {int initialCredits = 0}) async {
     _activeProxyLoops++;
     const batchSize = 64;
     final conn = FlowControlledRemoteConnection<T>.forSender(
@@ -188,7 +189,8 @@ abstract class ChannelCore<T, Self extends Object>
 
 /// Standard generic implementation of [ChannelCore].
 ///
-final class StandardChannelCore<T> extends ChannelCore<T, StandardChannelCore<T>> {
+final class StandardChannelCore<T>
+    extends ChannelCore<T, StandardChannelCore<T>> {
   StandardChannelCore(
     this.buf, {
     required this.allowMultiSenders,
@@ -243,7 +245,8 @@ abstract class Sender<T> with ChannelSendOps<T> {
   @override
   FlowControlledRemoteConnection<T>? get remoteConnection {
     if (localSendChannel != null) return null;
-    return _cachedConn ??= _senderConnections[this] as FlowControlledRemoteConnection<T>?;
+    return _cachedConn ??=
+        _senderConnections[this] as FlowControlledRemoteConnection<T>?;
   }
 
   /// Ensures connection is established for remote interactions
@@ -353,7 +356,8 @@ abstract class Receiver<T> with ChannelRecvOps<T> {
   @override
   FlowControlledRemoteConnection<T>? get remoteConnection {
     if (localRecvChannel != null) return null;
-    return _cachedConn ??= _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
+    return _cachedConn ??=
+        _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
   }
 
   /// Gets the remote buffer, initializing connection via Expando if needed.

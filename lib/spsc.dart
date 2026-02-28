@@ -50,20 +50,25 @@ final class Spsc {
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx = core.attachSender((c) => SpscSender<T>._(c.id, c.createRemotePort()));
-    final rx = core.attachReceiver((c) => SpscReceiver<T>._(c.id, c.createRemotePort()));
+    final tx =
+        core.attachSender((c) => SpscSender<T>._(c.id, c.createRemotePort()));
+    final rx = core
+        .attachReceiver((c) => SpscReceiver<T>._(c.id, c.createRemotePort()));
     return (tx, rx);
   }
 
-  static (SpscSender<T>, SpscReceiver<T>) bounded<T>(int capacity, {String? metricsId}) {
+  static (SpscSender<T>, SpscReceiver<T>) bounded<T>(int capacity,
+      {String? metricsId}) {
     final core = StandardChannelCore<T>(
       SrswBuffer<T>(capacity),
       allowMultiSenders: false,
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx = core.attachSender((c) => SpscSender<T>._(c.id, c.createRemotePort()));
-    final rx = core.attachReceiver((c) => SpscReceiver<T>._(c.id, c.createRemotePort()));
+    final tx =
+        core.attachSender((c) => SpscSender<T>._(c.id, c.createRemotePort()));
+    final rx = core
+        .attachReceiver((c) => SpscReceiver<T>._(c.id, c.createRemotePort()));
     return (tx, rx);
   }
 
@@ -74,8 +79,10 @@ final class Spsc {
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx = core.attachSender((c) => SpscSender<T>._(c.id, c.createRemotePort()));
-    final rx = core.attachReceiver((c) => SpscReceiver<T>._(c.id, c.createRemotePort()));
+    final tx =
+        core.attachSender((c) => SpscSender<T>._(c.id, c.createRemotePort()));
+    final rx = core
+        .attachReceiver((c) => SpscReceiver<T>._(c.id, c.createRemotePort()));
     return (tx, rx);
   }
 }
@@ -114,7 +121,8 @@ final class SpscSender<T> extends Sender<T> implements KeepAliveSender<T> {
   }
 }
 
-final class SpscReceiver<T> extends Receiver<T> implements KeepAliveReceiver<T> {
+final class SpscReceiver<T> extends Receiver<T>
+    implements KeepAliveReceiver<T> {
   SpscReceiver._(this.channelId, this.remotePort);
 
   /// Reconstructs a remote-only receiver from a transferable representation.

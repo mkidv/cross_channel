@@ -25,7 +25,9 @@ mixin ChannelSendOps<T> {
   @pragma('vm:prefer-inline')
   ChannelCore<T, Object>? get localSendChannel {
     final local = ChannelRegistry.get(channelId);
-    return (local != null && !identical(local, this)) ? local as ChannelCore<T, Object> : null;
+    return (local != null && !identical(local, this))
+        ? local as ChannelCore<T, Object>
+        : null;
   }
 
   /// Whether the channel's send side is disconnected.
@@ -146,7 +148,9 @@ mixin ChannelRecvOps<T> {
   @pragma('vm:prefer-inline')
   ChannelCore<T, Object>? get localRecvChannel {
     final local = ChannelRegistry.get(channelId);
-    return (local != null && !identical(local, this)) ? local as ChannelCore<T, Object> : null;
+    return (local != null && !identical(local, this))
+        ? local as ChannelCore<T, Object>
+        : null;
   }
 
   PlatformPort? get remotePort => null;

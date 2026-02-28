@@ -57,10 +57,10 @@ class Mpmc {
       allowMultiReceivers: true,
       metricsId: metricsId,
     );
-    final tx = core
-        .attachSender((c) => MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
-    final rx = core.attachReceiver(
-        (c) => MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final tx = core.attachSender((c) =>
+        MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final rx = core.attachReceiver((c) =>
+        MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -69,17 +69,19 @@ class Mpmc {
       throw ArgumentError.value(capacity, 'capacity', 'Must be >= 0');
     }
 
-    final buf = (capacity == 0) ? RendezvousBuffer<T>() : BoundedBuffer<T>(capacity: capacity);
+    final buf = (capacity == 0)
+        ? RendezvousBuffer<T>()
+        : BoundedBuffer<T>(capacity: capacity);
     final core = StandardChannelCore<T>(
       buf,
       allowMultiSenders: true,
       allowMultiReceivers: true,
       metricsId: metricsId,
     );
-    final tx = core
-        .attachSender((c) => MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
-    final rx = core.attachReceiver(
-        (c) => MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final tx = core.attachSender((c) =>
+        MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final rx = core.attachReceiver((c) =>
+        MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -97,19 +99,21 @@ class Mpmc {
         : (capacity == 0)
             ? RendezvousBuffer<T>()
             : BoundedBuffer<T>(capacity: capacity);
-    final bool usePolicy = capacity != null && capacity > 0 && policy != DropPolicy.block;
-    final ChannelBuffer<T> buf =
-        usePolicy ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop) : inner;
+    final bool usePolicy =
+        capacity != null && capacity > 0 && policy != DropPolicy.block;
+    final ChannelBuffer<T> buf = usePolicy
+        ? PolicyBufferWrapper<T>(inner, policy: policy, onDrop: onDrop)
+        : inner;
     final core = StandardChannelCore<T>(
       buf,
       allowMultiSenders: true,
       allowMultiReceivers: true,
       metricsId: metricsId,
     );
-    final tx = core
-        .attachSender((c) => MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
-    final rx = core.attachReceiver(
-        (c) => MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final tx = core.attachSender((c) =>
+        MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final rx = core.attachReceiver((c) =>
+        MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -121,10 +125,10 @@ class Mpmc {
       allowMultiReceivers: true,
       metricsId: metricsId,
     );
-    final tx = core
-        .attachSender((c) => MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
-    final rx = core.attachReceiver(
-        (c) => MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final tx = core.attachSender((c) =>
+        MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final rx = core.attachReceiver((c) =>
+        MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 }
@@ -137,7 +141,8 @@ final class MpmcSender<T> extends Sender<T> implements CloneableSender<T> {
   /// Use with [toTransferable] to transfer a sender across Web Workers
   /// or Isolates. The reconstructed sender always uses the remote path.
   factory MpmcSender.fromTransferable(Map<String, Object?> data) =>
-      MpmcSender._(-1, unpackPort(data['port']!), metricsId: data['metricsId'] as String?);
+      MpmcSender._(-1, unpackPort(data['port']!),
+          metricsId: data['metricsId'] as String?);
 
   @override
   final String? metricsId;
@@ -171,14 +176,15 @@ final class MpmcSender<T> extends Sender<T> implements CloneableSender<T> {
     if (_closed) throw StateError('Sender closed');
     final local = ChannelRegistry.get(channelId);
     if (local is StandardChannelCore<T>) {
-      return local
-          .attachSender((c) => MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+      return local.attachSender((c) =>
+          MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     }
     return MpmcSender<T>._(channelId, remotePort, metricsId: metricsId);
   }
 }
 
-final class MpmcReceiver<T> extends Receiver<T> implements CloneableReceiver<T> {
+final class MpmcReceiver<T> extends Receiver<T>
+    implements CloneableReceiver<T> {
   MpmcReceiver._(this.channelId, this.remotePort, {this.metricsId});
 
   /// Reconstructs a remote-only receiver from a transferable representation.
@@ -186,7 +192,8 @@ final class MpmcReceiver<T> extends Receiver<T> implements CloneableReceiver<T> 
   /// Use with [toTransferable] to transfer a receiver across Web Workers
   /// or Isolates. The reconstructed receiver always uses the remote path.
   factory MpmcReceiver.fromTransferable(Map<String, Object?> data) =>
-      MpmcReceiver._(-1, unpackPort(data['port']!), metricsId: data['metricsId'] as String?);
+      MpmcReceiver._(-1, unpackPort(data['port']!),
+          metricsId: data['metricsId'] as String?);
 
   @override
   final String? metricsId;
@@ -237,8 +244,9 @@ final class MpmcReceiver<T> extends Receiver<T> implements CloneableReceiver<T> 
     }
     final local = ChannelRegistry.get(channelId);
     if (local is StandardChannelCore<T>) {
-      return local.attachReceiver(
-          (c) => MpmcReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+      return local.attachReceiver((c) => MpmcReceiver<T>._(
+          c.id, c.createRemotePort(),
+          metricsId: c.metricsId));
     }
     return MpmcReceiver<T>._(channelId, remotePort, metricsId: metricsId);
   }

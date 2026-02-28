@@ -166,7 +166,8 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
     }
 
     int initCredits = cap ?? defaultBoundedCapacity;
-    int batchSize = cap != null && cap > 1 ? cap ~/ 2 : (cap == 1 ? 1 : creditBatchSize);
+    int batchSize =
+        cap != null && cap > 1 ? cap ~/ 2 : (cap == 1 ? 1 : creditBatchSize);
     if (initCredits == 0) initCredits = 1;
     if (batchSize == 0) batchSize = 1;
 
@@ -214,7 +215,8 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
   void _initReceiverListener() {
     final rx = createReceiver();
     _receiver = rx;
-    _targetPort.send(ConnectRecvRequest(rx.sendPort, _initialCreditsToSend).toTransferable());
+    _targetPort.send(ConnectRecvRequest(rx.sendPort, _initialCreditsToSend)
+        .toTransferable());
     _subscription = rx.messages.asyncMap(onMessage).listen((_) {});
   }
 

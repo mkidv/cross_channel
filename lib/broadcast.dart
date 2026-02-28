@@ -45,8 +45,9 @@ final class Broadcast<T> {
       allowMultiReceivers: true,
       metricsId: metricsId,
     );
-    final tx = core.attachSender(
-        (c) => BroadcastSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final tx = core.attachSender((c) => BroadcastSender<T>._(
+        c.id, c.createRemotePort(),
+        metricsId: c.metricsId));
     final broadcast = Broadcast<T>._(buffer, core.id);
     return (tx, broadcast);
   }
@@ -68,7 +69,8 @@ final class BroadcastSender<T> extends Sender<T> implements KeepAliveSender<T> {
 
   /// Reconstructs a remote-only sender from a transferable representation.
   factory BroadcastSender.fromTransferable(Map<String, Object?> data) =>
-      BroadcastSender._(-1, unpackPort(data['port']!), metricsId: data['metricsId'] as String?);
+      BroadcastSender._(-1, unpackPort(data['port']!),
+          metricsId: data['metricsId'] as String?);
 
   @override
   final int channelId;
@@ -101,8 +103,10 @@ final class BroadcastSender<T> extends Sender<T> implements KeepAliveSender<T> {
   }
 }
 
-final class BroadcastReceiver<T> extends Receiver<T> implements KeepAliveReceiver<T> {
-  BroadcastReceiver._(this.channelId, this.remotePort, BroadcastRing<T> buffer, int replay,
+final class BroadcastReceiver<T> extends Receiver<T>
+    implements KeepAliveReceiver<T> {
+  BroadcastReceiver._(
+      this.channelId, this.remotePort, BroadcastRing<T> buffer, int replay,
       {this.metricsId}) {
     // Initialize cursor in the buffer.
     // Note: We don't store [buffer] to allow BroadcastReceiver to be sent across Isolates.
