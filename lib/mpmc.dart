@@ -166,7 +166,7 @@ final class MpmcSender<T> extends Sender<T> implements CloneableSender<T> {
     if (local != null) {
       local.dropSender();
     } else {
-      remoteConnection?.close();
+      closeRemote();
     }
   }
 

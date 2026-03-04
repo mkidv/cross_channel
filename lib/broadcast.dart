@@ -98,7 +98,7 @@ final class BroadcastSender<T> extends Sender<T> implements KeepAliveSender<T> {
       local.dropSender();
     } else {
       // Remote close
-      remoteConnection?.close();
+      closeRemote();
     }
   }
 }

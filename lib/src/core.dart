@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/lifecycle.dart';
+import 'package:cross_channel/src/metrics/core.dart';
 import 'package:cross_channel/src/metrics/recorders.dart';
+import 'package:cross_channel/src/metrics/registry.dart';
 import 'package:cross_channel/src/ops.dart';
 import 'package:cross_channel/src/platform/platform.dart';
 import 'package:cross_channel/src/protocol.dart';
@@ -80,6 +82,9 @@ abstract class ChannelCore<T, Self extends Object>
         _handleConnectRecvRequest(msg);
       } else if (msg is ConnectSenderRequest) {
         _handleConnectSenderRequest(msg);
+      } else if (msg is MetricsSync) {
+        MetricsRegistry().merge(
+            GlobalMetrics(DateTime.now(), {msg.metricsId: msg.snapshot}));
       } else if (msg is FlowCredit) {
         for (final c in _connectedSenders) {
           c.handleRemoteMessage(msg);
@@ -260,6 +265,13 @@ abstract class Sender<T> with ChannelSendOps<T> {
     return newConn;
   }
 
+  /// Closes the remote connection if active and syncs metrics.
+  void closeRemote() {
+    _syncMetricsRemote(remotePort, metricsId);
+    final conn = remoteConnection;
+    conn?.close();
+  }
+
   @override
   Future<SendResult> send(T value) async {
     if (localSendChannel case final lc?) return lc.send(value);
@@ -364,6 +376,7 @@ abstract class Receiver<T> with ChannelRecvOps<T> {
 
   /// Closes the remote connection if active.
   void closeRemote() {
+    _syncMetricsRemote(remotePort, metricsId);
     final conn =
         _receiverConnections[this] as FlowControlledRemoteConnection<T>?;
     conn?.close();
@@ -396,3 +409,12 @@ abstract class CloneableSender<T> extends KeepAliveSender<T>
 
 abstract class CloneableReceiver<T> extends KeepAliveReceiver<T>
     implements Clones<CloneableReceiver<T>> {}
+
+void _syncMetricsRemote(PlatformPort port, String? metricsId) {
+  if (metricsId == null) return;
+  final snap = MetricsRegistry().channelSnapshot(metricsId);
+  if (snap == null) return;
+  try {
+    port.send(MetricsSync(metricsId, snap).toTransferable());
+  } catch (_) {}
+}

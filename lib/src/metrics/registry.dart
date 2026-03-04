@@ -11,6 +11,32 @@ class MetricsRegistry {
 
   ChannelMetrics attach(String id) => _map[id] ??= ChannelMetrics();
 
+  ChannelSnapshot? channelSnapshot(String id) {
+    if (!kMetrics || !MetricsConfig.enabled) return null;
+    final m = _map[id];
+    if (m == null) return null;
+    return ChannelSnapshot(
+      sent: m.sent,
+      recv: m.recv,
+      dropped: m.dropped,
+      closed: m.closed,
+      trySendOk: m.trySendOk,
+      trySendFail: m.trySendFail,
+      tryRecvOk: m.tryRecvOk,
+      tryRecvEmpty: m.tryRecvEmpty,
+      sendP50: m.sendLatency.p50,
+      sendP95: m.sendLatency.p95,
+      sendP99: m.sendLatency.p99,
+      recvP50: m.recvLatency.p50,
+      recvP95: m.recvLatency.p95,
+      recvP99: m.recvLatency.p99,
+      recvFirstNs: m.recvFirstNs,
+      recvLastNs: m.recvLastNs,
+      sendFirstNs: m.sendFirstNs,
+      sendLastNs: m.sendLastNs,
+    );
+  }
+
   void merge(GlobalMetrics other) {
     if (!kMetrics || !MetricsConfig.enabled) return;
     _externals.add(other);

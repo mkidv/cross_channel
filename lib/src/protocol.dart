@@ -1,6 +1,7 @@
 /// Protocol for Cross-Channel internal communication.
 library;
 
+import 'package:cross_channel/src/metrics/core.dart';
 import 'package:cross_channel/src/platform/platform.dart';
 
 /// Base class for all internal control messages.
@@ -25,6 +26,10 @@ sealed class ControlMessage {
       'Disconnect' => const Disconnect(),
       'FlowCredit' => FlowCredit(map['credits']! as int),
       'BatchMessage' => BatchMessage(map['values']! as List),
+      'MetricsSync' => MetricsSync(
+          map['metricsId']! as String,
+          ChannelSnapshot.fromTransferable(
+              map['snapshot']! as Map<Object?, Object?>)),
       _ => null,
     };
   }
@@ -100,5 +105,20 @@ final class FlowCredit extends ControlMessage {
   Map<String, Object?> toTransferable() => {
         '#cc': 'FlowCredit',
         'credits': credits,
+      };
+}
+
+/// Syncs metrics from a remote sender/receiver to the channel's parent isolate.
+final class MetricsSync extends ControlMessage {
+  final String metricsId;
+  final ChannelSnapshot snapshot;
+
+  const MetricsSync(this.metricsId, this.snapshot);
+
+  @override
+  Map<String, Object?> toTransferable() => {
+        '#cc': 'MetricsSync',
+        'metricsId': metricsId,
+        'snapshot': snapshot.toTransferable(),
       };
 }

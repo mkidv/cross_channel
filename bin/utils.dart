@@ -104,17 +104,17 @@ Future<void> benchPipeline(Channel<int> ch, int iters) async {
       if (!v.hasValue || rx.recvDisconnected) break;
       received++;
     }
-    if (rx is Closeable) (rx as Closeable).close();
   }();
 
   final s = () async {
     for (var i = 0; i < iters; i++) {
       await tx.send(i);
     }
-    if (tx is Closeable) (tx as Closeable).close();
   }();
 
-  await Future.wait([r, s]);
+  await Future.wait<void>([r, s]);
+  if (rx is Closeable) (rx as Closeable).close();
+  if (tx is Closeable) (tx as Closeable).close();
 }
 
 /// N producers pushes N, consumer drains N.
@@ -146,7 +146,7 @@ Future<void> benchMultiPipeline(
     }
   }
 
-  final itersByProd = iters / prods;
+  final itersByProd = iters ~/ prods;
   var received = 0;
 
   final rt = <Future<void>>[];
@@ -157,7 +157,6 @@ Future<void> benchMultiPipeline(
         if (!v.hasValue || rx.recvDisconnected) break;
         received++;
       }
-      if (rx is Closeable) (rx as Closeable).close();
     }());
   }
 
@@ -167,11 +166,17 @@ Future<void> benchMultiPipeline(
       for (var k = 0; k < itersByProd; k++) {
         await tx.send(k);
       }
-      if (tx is Closeable) (tx as Closeable).close();
     }());
   }
 
-  await Future.wait([...rt, ...st]);
+  await Future.wait<void>([...rt, ...st]);
+
+  for (final rx in receivers) {
+    if (rx is Closeable) (rx as Closeable).close();
+  }
+  for (final tx in senders) {
+    if (tx is Closeable) (tx as Closeable).close();
+  }
 }
 
 /// Cross-Isolate Pipeline: Isolate A (sender) → Isolate B (receiver)
@@ -218,7 +223,7 @@ Future<void> benchCrossIsolatePipeline(Channel<int> ch, int iters) async {
   }, senderDone.sendPort);
 
   // Wait for sender to finish first
-  final senderRes = await senderDone.first;
+  await senderDone.first;
 
   // Close the local anchors so the channel knows it's disconnected
   // This is required for lossy channels (like Broadcast) where the
@@ -226,14 +231,11 @@ Future<void> benchCrossIsolatePipeline(Channel<int> ch, int iters) async {
   if (tx is Closeable) (tx as Closeable).close();
 
   // Wait for receiver to finish
-  final receiverRes = await receiverDone.first;
+  await receiverDone.first;
 
-  // Merge metrics
-  for (final res in [receiverRes, senderRes]) {
-    if (res is (int, GlobalMetrics)) {
-      MetricsRegistry().merge(res.$2);
-    }
-  }
+  // Let core process async MetricsSync (which arrive via channel's own port) before completing.
+  await Future<void>.delayed(const Duration(milliseconds: 50));
+
   receiverDone.close();
   senderDone.close();
 }
@@ -286,12 +288,11 @@ Future<void> benchCrossIsolatePingPong(
   }, isolateADone.sendPort);
 
   // Wait for both to finish
-  final results = await Future.wait([isolateADone.first, isolateBDone.first]);
-  for (final res in results) {
-    if (res is (int, GlobalMetrics)) {
-      MetricsRegistry().merge(res.$2);
-    }
-  }
+  await Future.wait([isolateADone.first, isolateBDone.first]);
+
+  // Let core process async MetricsSync (which arrive via channel's own port) before completing.
+  await Future<void>.delayed(const Duration(milliseconds: 50));
+
   isolateADone.close();
   isolateBDone.close();
 }

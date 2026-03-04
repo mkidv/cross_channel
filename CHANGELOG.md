@@ -10,6 +10,21 @@
 
 ---
 
+## [0.10.1] – 2026-03-05
+
+### Added
+
+- **Automated Inter-Isolate Metrics Sync**:
+  - Introduced the `MetricsSync` backend control message.
+  - Channels now automatically merge metrics from remote isolates or Web Workers upon closure, completely eliminating the need for manual `MetricsRegistry().merge()` calls over background ports.
+
+### Fixed
+
+- **Metrics Counting Race Condition**: Fixed an off-by-one error in benchmarking utilities where early receiver closures led to silent `SendErrorDisconnected` drops for final sender metrics.
+- Centralized `closeRemote()` in base `Sender` and `Receiver` classes to standardize remote port resource cleanup and final metric synchronization.
+
+---
+
 ## [0.10.0] – 2026-02-28
 
 ### Added

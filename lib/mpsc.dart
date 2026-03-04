@@ -164,9 +164,7 @@ final class MpscSender<T> extends Sender<T> implements CloneableSender<T> {
     if (local != null) {
       local.dropSender();
     } else {
-      // Remote close via Expando
-      final conn = remoteConnection;
-      conn?.close();
+      closeRemote();
     }
   }
 

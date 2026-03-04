@@ -67,6 +67,49 @@ final class ChannelSnapshot {
     this.sendLastNs = 0,
   });
 
+  Map<String, Object?> toTransferable() => {
+        'sent': sent,
+        'recv': recv,
+        'dropped': dropped,
+        'closed': closed,
+        'trySendOk': trySendOk,
+        'trySendFail': trySendFail,
+        'tryRecvOk': tryRecvOk,
+        'tryRecvEmpty': tryRecvEmpty,
+        if (sendP50 != null) 'sendP50': sendP50,
+        if (sendP95 != null) 'sendP95': sendP95,
+        if (sendP99 != null) 'sendP99': sendP99,
+        if (recvP50 != null) 'recvP50': recvP50,
+        if (recvP95 != null) 'recvP95': recvP95,
+        if (recvP99 != null) 'recvP99': recvP99,
+        'recvFirstNs': recvFirstNs,
+        'recvLastNs': recvLastNs,
+        'sendFirstNs': sendFirstNs,
+        'sendLastNs': sendLastNs,
+      };
+
+  factory ChannelSnapshot.fromTransferable(Map<Object?, Object?> map) =>
+      ChannelSnapshot(
+        sent: map['sent'] as int? ?? 0,
+        recv: map['recv'] as int? ?? 0,
+        dropped: map['dropped'] as int? ?? 0,
+        closed: map['closed'] as int? ?? 0,
+        trySendOk: map['trySendOk'] as int? ?? 0,
+        trySendFail: map['trySendFail'] as int? ?? 0,
+        tryRecvOk: map['tryRecvOk'] as int? ?? 0,
+        tryRecvEmpty: map['tryRecvEmpty'] as int? ?? 0,
+        sendP50: map['sendP50'] as double?,
+        sendP95: map['sendP95'] as double?,
+        sendP99: map['sendP99'] as double?,
+        recvP50: map['recvP50'] as double?,
+        recvP95: map['recvP95'] as double?,
+        recvP99: map['recvP99'] as double?,
+        recvFirstNs: map['recvFirstNs'] as int? ?? 0,
+        recvLastNs: map['recvLastNs'] as int? ?? 0,
+        sendFirstNs: map['sendFirstNs'] as int? ?? 0,
+        sendLastNs: map['sendLastNs'] as int? ?? 0,
+      );
+
   ChannelSnapshot merge(ChannelSnapshot other) {
     return ChannelSnapshot(
       sent: sent + other.sent,

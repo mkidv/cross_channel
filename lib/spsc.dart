@@ -50,10 +50,10 @@ final class Spsc {
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx =
-        core.attachSender((c) => SpscSender<T>._(c.id, c.createRemotePort()));
-    final rx = core
-        .attachReceiver((c) => SpscReceiver<T>._(c.id, c.createRemotePort()));
+    final tx = core.attachSender((c) =>
+        SpscSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final rx = core.attachReceiver((c) =>
+        SpscReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -65,10 +65,10 @@ final class Spsc {
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx =
-        core.attachSender((c) => SpscSender<T>._(c.id, c.createRemotePort()));
-    final rx = core
-        .attachReceiver((c) => SpscReceiver<T>._(c.id, c.createRemotePort()));
+    final tx = core.attachSender((c) =>
+        SpscSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final rx = core.attachReceiver((c) =>
+        SpscReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 
@@ -79,23 +79,27 @@ final class Spsc {
       allowMultiReceivers: false,
       metricsId: metricsId,
     );
-    final tx =
-        core.attachSender((c) => SpscSender<T>._(c.id, c.createRemotePort()));
-    final rx = core
-        .attachReceiver((c) => SpscReceiver<T>._(c.id, c.createRemotePort()));
+    final tx = core.attachSender((c) =>
+        SpscSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+    final rx = core.attachReceiver((c) =>
+        SpscReceiver<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
     return (tx, rx);
   }
 }
 
 final class SpscSender<T> extends Sender<T> implements KeepAliveSender<T> {
-  SpscSender._(this.channelId, this.remotePort);
+  SpscSender._(this.channelId, this.remotePort, {this.metricsId});
 
   /// Reconstructs a remote-only sender from a transferable representation.
   ///
   /// Use with [toTransferable] to transfer a sender across Web Workers
   /// or Isolates. The reconstructed sender always uses the remote path.
   factory SpscSender.fromTransferable(Map<String, Object?> data) =>
-      SpscSender._(-1, unpackPort(data['port']!));
+      SpscSender._(-1, unpackPort(data['port']!),
+          metricsId: data['metricsId'] as String?);
+
+  @override
+  final String? metricsId;
 
   @override
   final int channelId;
@@ -116,21 +120,25 @@ final class SpscSender<T> extends Sender<T> implements KeepAliveSender<T> {
     if (local != null) {
       local.dropSender();
     } else {
-      remoteConnection?.close();
+      closeRemote();
     }
   }
 }
 
 final class SpscReceiver<T> extends Receiver<T>
     implements KeepAliveReceiver<T> {
-  SpscReceiver._(this.channelId, this.remotePort);
+  SpscReceiver._(this.channelId, this.remotePort, {this.metricsId});
 
   /// Reconstructs a remote-only receiver from a transferable representation.
   ///
   /// Use with [toTransferable] to transfer a receiver across Web Workers
   /// or Isolates. The reconstructed receiver always uses the remote path.
   factory SpscReceiver.fromTransferable(Map<String, Object?> data) =>
-      SpscReceiver._(-1, unpackPort(data['port']!));
+      SpscReceiver._(-1, unpackPort(data['port']!),
+          metricsId: data['metricsId'] as String?);
+
+  @override
+  final String? metricsId;
 
   @override
   final int channelId;
