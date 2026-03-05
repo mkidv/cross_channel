@@ -176,8 +176,8 @@ final class MpmcSender<T> extends Sender<T> implements CloneableSender<T> {
     if (_closed) throw StateError('Sender closed');
     final local = ChannelRegistry.get(channelId);
     if (local is StandardChannelCore<T>) {
-      return local.attachSender((c) =>
-          MpmcSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+      return local.attachSender(
+          (c) => MpmcSender<T>._(c.id, remotePort, metricsId: c.metricsId));
     }
     return MpmcSender<T>._(channelId, remotePort, metricsId: metricsId);
   }
@@ -244,10 +244,13 @@ final class MpmcReceiver<T> extends Receiver<T>
     }
     final local = ChannelRegistry.get(channelId);
     if (local is StandardChannelCore<T>) {
-      return local.attachReceiver((c) => MpmcReceiver<T>._(
-          c.id, c.createRemotePort(),
-          metricsId: c.metricsId));
+      return local.attachReceiver(
+          (c) => MpmcReceiver<T>._(c.id, remotePort, metricsId: c.metricsId));
     }
     return MpmcReceiver<T>._(channelId, remotePort, metricsId: metricsId);
   }
+}
+
+extension MpmcChannelX<T> on MpmcChannel<T> {
+  MpmcChannel<T> clone() => ($1.clone(), $2.clone());
 }

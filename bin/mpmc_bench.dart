@@ -74,13 +74,12 @@ Future<void> main(List<String> args) async {
 
   // Cross-Isolate Benchmarks
   await benchCrossIsolatePipeline(
-      Mpmc.unbounded<int>(metricsId: 'cross-isolate pipeline (IsoA→IsoB)'),
-      iters);
+      Mpmc.unbounded<int>(metricsId: 'cross-isolate pipeline'), iters ~/ 10);
 
   await benchCrossIsolatePingPong(
-      Mpmc.bounded<int>(1, metricsId: 'cross-isolate ping-pong AB'),
-      Mpmc.bounded<int>(1, metricsId: 'cross-isolate ping-pong BA'),
-      iters);
+      Mpmc.bounded<int>(1, metricsId: 'cross-isolate ping-pong cap=1 AB'),
+      Mpmc.bounded<int>(1, metricsId: 'cross-isolate ping-pong cap=1 BA'),
+      iters ~/ 10);
 
   MetricsRegistry().export();
   exit(0);

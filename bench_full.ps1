@@ -6,7 +6,7 @@ param(
   [int]$Count = 1000000,
   [Nullable[int]]$Affinity,
   [ValidateSet('Idle','BelowNormal','Normal','AboveNormal','High','RealTime')]
-  [string]$Priority = 'AboveNormal',
+  [string]$Priority = 'High',
   [int]$Repeat = 1,
   [switch]$Csv,
   [string]$OutCsv = "bench\out.csv",

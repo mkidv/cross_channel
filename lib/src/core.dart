@@ -63,8 +63,16 @@ abstract class ChannelCore<T, Self extends Object>
   final _connectedSenders = <FlowControlledRemoteConnection<T>>[];
   int _activeProxyLoops = 0;
 
+  PlatformReceiver? _lazyReceiver;
+  PlatformPort? _cachedSendPort;
+
   PlatformPort createRemotePort() {
+    if (_cachedSendPort != null) return _cachedSendPort!;
+
     final rx = createReceiver();
+    _lazyReceiver = rx;
+    _cachedSendPort = rx.sendPort;
+
     rx.messages.listen((msg) {
       if (msg is Map) {
         final ctrl = ControlMessage.fromTransferable(msg);
@@ -91,6 +99,14 @@ abstract class ChannelCore<T, Self extends Object>
       if (!buf.isEmpty) buf.wakeAllPushWaiters();
     });
     return rx.sendPort;
+  }
+
+  @override
+  void onFullyClosed() {
+    ChannelRegistry.unregister(id);
+    _lazyReceiver?.close();
+    _lazyReceiver = null;
+    _cachedSendPort = null;
   }
 
   void _handleConnectRecvRequest(ConnectRecvRequest req) {

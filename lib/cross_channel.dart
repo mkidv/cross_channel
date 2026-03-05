@@ -5,8 +5,12 @@ import 'package:cross_channel/oneshot.dart';
 import 'package:cross_channel/spsc.dart';
 
 export 'broadcast.dart';
+export 'mpmc.dart';
+export 'mpsc.dart';
 export 'notify.dart';
+export 'oneshot.dart';
 export 'select.dart';
+export 'spsc.dart';
 export 'src/buffers.dart' show DropPolicy, OnDrop;
 export 'src/extensions.dart';
 export 'src/result.dart';

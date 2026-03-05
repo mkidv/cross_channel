@@ -22,7 +22,7 @@ Fast & flexible channels for Dart/Flutter.
 A complete concurrency toolkit providing Rust-style synchronization primitives: **MPSC, MPMC, SPSC, OneShot, and Broadcast (SPMC)**.
 
 <p align="center">
-  <b>Bench-tested</b> · <code>~1.6–1.9 Mops/s</code>
+  <b>Bench-tested</b> · <code>~1.2–2.6 Mops/s</code>
 </p>
 
 ## ✨ Features
@@ -528,53 +528,57 @@ cancel(); // attempts to abort the wait if still pending
 
 | case                                 | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
 | ------------------------------------ | ------------: | -----------: | ------------: |
-| ping-pong cap=1 (1P/1C)              |          1.87 |        535.7 |           7.5 |
-| pipeline cap=1024 (1P/1C)            |          1.83 |        547.1 |          13.1 |
-| pipeline unbounded (1P/1C)           |          1.77 |        563.0 |          12.3 |
-| pipeline unbounded (chunked) (1P/1C) |          1.83 |        546.5 |          10.1 |
-| multi-producers cap=1024 (4P/1C)     |          1.72 |        565.6 |          10.6 |
-| pipeline rendezvous cap=0 (1P/1C)    |          1.68 |        593.8 |          11.4 |
-| sliding=oldest cap=1024 (1P/1C)      |          1.76 |        568.3 |          15.9 |
-| sliding=newest cap=1024 (1P/1C)      |          1.74 |        574.6 |          11.6 |
-| latestOnly (coalesce) (1P/1C)        |          1.60 |        626.3 |          14.9 |
+| ping-pong cap=1 AB (1P/1C)           |          1.39 |        720.8 |          23.2 |
+| ping-pong cap=1 BA (1P/1C)           |          1.39 |        720.8 |           1.0 |
+| pipeline cap=1024 (1P/1C)            |          1.26 |        793.8 |          19.5 |
+| pipeline unbounded (1P/1C)           |          1.25 |        798.8 |          19.7 |
+| pipeline unbounded (chunked) (1P/1C) |          1.22 |        823.2 |          23.2 |
+| multi-producers cap=1024 (4P/1C)     |          1.25 |        801.7 |          19.0 |
+| pipeline rendezvous cap=0 (1P/1C)    |          1.21 |        829.3 |          16.2 |
+| sliding oldest cap=1024 (1P/1C)      |          1.27 |        788.3 |          17.2 |
+| sliding newest cap=1024 (1P/1C)      |          1.28 |        783.7 |          21.8 |
+| latestOnly (coalesce) (1P/1C)        |          1.26 |        796.1 |          22.1 |
 
 ### MPMC
 
-| case                                      | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
-| ----------------------------------------- | ------------: | -----------: | ------------: |
-| ping-pong cap=1 (1P/1C)                   |          1.87 |        536.1 |           7.5 |
-| pipeline cap=1024 (1P/1C)                 |          1.90 |        525.0 |          14.2 |
-| pipeline unbounded (1P/1C)                |          1.87 |        534.1 |          11.4 |
-| multi-producers cap=1024 (4P/1C)          |          1.72 |        580.5 |          18.0 |
-| multi-producers cap=1024 (4P/4C)          |          1.72 |        580.8 |          16.7 |
-| pipeline rendezvous cap=0 (1P/1C)         |          1.62 |        619.0 |          13.0 |
-| sliding=oldest cap=1024 (1P/1C)           |          1.76 |        569.5 |          14.9 |
-| sliding=newest cap=1024 (1P/1C)           |          1.74 |        573.5 |          10.9 |
-| latestOnly (coalesce) (1P/1C)             |          1.63 |        614.3 |          15.8 |
-| latestOnly (coalesce/competitive) (1P/4C) |          1.66 |        604.1 |          22.8 |
+| case                                 | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
+| ------------------------------------ | ------------: | -----------: | ------------: |
+| ping-pong cap=1 AB (1P/1C)           |          1.31 |        761.6 |          30.9 |
+| ping-pong cap=1 BA (1P/1C)           |          1.31 |        761.6 |           2.7 |
+| pipeline cap=1024 (1P/1C)            |          1.24 |        808.4 |          26.5 |
+| pipeline unbounded (1P/1C)           |          1.26 |        795.4 |          27.5 |
+| pipeline unbounded (chunked) (1P/1C) |          1.25 |        797.2 |          16.7 |
+| multi-producers cap=1024 (4P/1C)     |          1.20 |        832.5 |          26.4 |
+| multi-producers cap=1024 (4P/4C)     |          1.19 |        840.6 |          23.4 |
+| pipeline rendezvous cap=0 (1P/1C)    |          1.18 |        848.9 |          22.0 |
+| sliding oldest cap=1024 (1P/1C)      |          1.28 |        780.9 |          18.2 |
+| sliding newest cap=1024 (1P/1C)      |          1.31 |        763.0 |          17.5 |
+| latestOnly (coalesce) (1P/1C)        |          1.34 |        749.4 |          17.6 |
+| competitive (1P/4C)                  |          1.30 |        769.2 |          21.0 |
 
 ### SPSC
 
 | case                    | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
 | ----------------------- | ------------: | -----------: | ------------: |
-| spsc ping-pong cap=1024 |          1.76 |        569.8 |           5.2 |
-| spsc pipeline cap=1024  |          1.78 |        562.8 |           7.1 |
-| spsc pipeline cap=4096  |          1.80 |        555.3 |          15.7 |
+| spsc ping-pong cap=1 AB |          1.40 |        715.0 |          33.7 |
+| spsc ping-pong cap=1 BA |          1.40 |        715.0 |           1.4 |
+| spsc pipeline cap=1024  |          1.25 |        797.3 |          18.9 |
+| spsc pipeline cap=4096  |          1.26 |        795.1 |          21.9 |
 
 ### ONESHOT
 
 | case                 | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
 | -------------------- | ------------: | -----------: | ------------: |
-| oneshot send+receive |          2.75 |        363.6 |           1.7 |
-| oneshot pipeline     |          2.80 |        356.9 |           4.3 |
+| oneshot send+receive |          2.08 |        481.4 |           1.9 |
+| oneshot pipeline     |          2.10 |        475.7 |           1.2 |
 
 ### BROADCAST (SPMC Ring)
 
 | case                       | Mops/s (recv) | ns/op (recv) | p99 us (recv) |
 | -------------------------- | ------------: | -----------: | ------------: |
-| broadcast pipeline (1P/1C) |          0.56 |       1792.6 |         306.9 |
-| broadcast pipeline (1P/4C) |          0.93 |       1080.8 |         156.6 |
-| broadcast pipeline (1P/8C) |          0.91 |       1098.9 |         247.6 |
+| broadcast pipeline (1P/1C) |          0.77 |       1299.9 |          36.9 |
+| broadcast pipeline (1P/4C) |          1.03 |        975.2 |         106.8 |
+| broadcast pipeline (1P/8C) |          1.08 |        924.5 |         140.3 |
 
 ### How to bench
 

@@ -16,21 +16,27 @@ Future<void> main(List<String> args) async {
   // Warmup
   await benchPipeline(Spsc.channel<int>(1, metricsId: 'warmup'), 200_000);
 
-  await benchPingPong(Spsc.channel<int>(1, metricsId: 'ping-pong 1:AB'),
-      Spsc.channel<int>(1, metricsId: 'ping-pong 1:BA'), iters);
+  await benchPingPong(Spsc.channel<int>(1, metricsId: 'ping-pong cap=1 AB'),
+      Spsc.channel<int>(1, metricsId: 'ping-pong cap=1 BA'), iters);
 
   await benchPipeline(
-    Spsc.channel<int>(1024, metricsId: 'pipeline 1024'),
+    Spsc.channel<int>(1024, metricsId: 'pipeline cap=1024'),
     iters,
   );
 
   await benchPipeline(
-    Spsc.channel<int>(4096, metricsId: 'pipeline 4096'),
+    Spsc.channel<int>(4096, metricsId: 'pipeline cap=4096'),
     iters,
   );
 
   await benchCrossIsolatePipeline(
-      Spsc.channel<int>(1024, metricsId: 'cross-isolate pipeline 1024'), iters);
+      Spsc.channel<int>(1024, metricsId: 'cross-isolate pipeline cap=1024'),
+      iters ~/ 10);
+
+  await benchCrossIsolatePingPong(
+      Spsc.channel<int>(1, metricsId: 'cross-isolate ping-pong cap=1 AB'),
+      Spsc.channel<int>(1, metricsId: 'cross-isolate ping-pong cap=1 BA'),
+      iters ~/ 10);
 
   MetricsRegistry().export();
   exit(0);

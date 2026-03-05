@@ -10,6 +10,15 @@
 
 ---
 
+## [0.10.3] - 2026-03-06
+
+### Fixed
+
+- **Memory Leak**: Channels are now strictly unregistered from the global `ChannelRegistry` when fully closed (when all relative senders and receivers drop), preventing boundless memory leaks.
+- **Resource Efficiency**: `ChannelCore` now correctly lazily initializes and shares a single `PlatformReceiver` port across local sender/receiver `clone()` invocations, drastically cutting down on redundant ReceivePorts and background proxy listeners.
+
+---
+
 ## [0.10.2] – 2026-03-05
 
 ### Added

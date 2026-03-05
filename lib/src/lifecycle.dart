@@ -61,6 +61,7 @@ mixin ChannelLifecycle<T, Self extends Object> {
         buf.failAllPopWaiters(const RecvErrorDisconnected());
         mx.markClosed();
       }
+      _checkFullyClosed();
     }
   }
 
@@ -75,6 +76,17 @@ mixin ChannelLifecycle<T, Self extends Object> {
       buf.failAllPopWaiters(const RecvErrorDisconnected());
       buf.clear();
       mx.markClosed();
+      _checkFullyClosed();
     }
   }
+
+  void _checkFullyClosed() {
+    if (_closedSenders && _closedReceivers) {
+      onFullyClosed();
+    }
+  }
+
+  /// Called when the channel has no more active local senders or receivers.
+  /// Subclasses should implement this to clean up resources (e.g. unregistering IDs, closing ports).
+  void onFullyClosed() {}
 }

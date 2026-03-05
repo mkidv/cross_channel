@@ -174,8 +174,8 @@ final class MpscSender<T> extends Sender<T> implements CloneableSender<T> {
     if (_closed) throw StateError('Sender closed');
     final local = ChannelRegistry.get(channelId);
     if (local is StandardChannelCore<T>) {
-      return local.attachSender((c) =>
-          MpscSender<T>._(c.id, c.createRemotePort(), metricsId: c.metricsId));
+      return local.attachSender(
+          (c) => MpscSender<T>._(c.id, remotePort, metricsId: c.metricsId));
     }
     return MpscSender<T>._(channelId, remotePort, metricsId: metricsId);
   }
