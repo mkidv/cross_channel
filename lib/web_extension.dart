@@ -21,16 +21,9 @@ extension MessagePortRequestX on MessagePort {
   /// - [data]: Optional data payload
   /// - [transfer]: Optional transferable objects (ArrayBuffers, etc.)
   ///
-  /// **Example:**
-  /// ```dart
-  /// // Send image processing command with transfer
-  /// final imageBuffer = await loadImageBuffer();
-  /// workerPort.sendCmd(
-  ///   'process_image',
-  ///   data: {'filters': ['blur', 'sharpen']},
-  ///   transfer: imageBuffer, // Transfer ownership for performance
-  /// );
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/web_example.dart}
+  /// {@end-tool}
   void sendCmd(
     String command, {
     Map<String, Object?>? data,
@@ -55,39 +48,9 @@ extension MessagePortRequestX on MessagePort {
   /// - [data]: Optional data payload
   /// - [timeout]: Maximum wait time (default: 3 seconds)
   ///
-  /// **Web Worker Processing:**
-  /// ```dart
-  /// // Main thread - send heavy computation to worker
-  /// final result = await workerPort.request<ProcessingResult>(
-  ///   'analyze_data',
-  ///   data: {
-  ///     'dataset': largeDataset,
-  ///     'algorithm': 'machine_learning'
-  ///   },
-  ///   timeout: Duration(minutes: 5),
-  /// );
-  /// ```
-  ///
-  /// **Image Processing:**
-  /// ```dart
-  /// // Offload image filters to Web Worker
-  /// final filteredImage = await imageWorkerPort.request<ImageData>(
-  ///   'apply_filters',
-  ///   data: {
-  ///     'image': originalImage,
-  ///     'filters': ['gaussian_blur', 'edge_detection']
-  ///   },
-  /// );
-  /// ```
-  ///
-  /// **Crypto Operations:**
-  /// ```dart
-  /// // Secure hashing in Web Worker
-  /// final hash = await cryptoWorkerPort.request<String>(
-  ///   'compute_hash',
-  ///   data: {'algorithm': 'SHA-256', 'data': sensitiveData},
-  /// );
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/web_example.dart}
+  /// {@end-tool}
   ///
   Future<R> request<R>(
     String command, {

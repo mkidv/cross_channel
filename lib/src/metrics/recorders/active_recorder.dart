@@ -26,33 +26,39 @@ final class ActiveMetricsRecorder implements MetricsRecorder {
   @override
   @pragma('vm:prefer-inline')
   void sendOk(int t0) {
-    m.sent++;
+    final count = ++m.sent;
     if (t0 != 0) {
       final now = _nowNs();
       m.sendLatency.insert((now - t0).toDouble());
       m.markSendNowNs(now);
+    } else if ((count & 0x7F) == 1) {
+      m.markSendNowNs(_nowNs());
     }
   }
 
   @override
   @pragma('vm:prefer-inline')
   void recvOk(int t0) {
-    m.recv++;
+    final count = ++m.recv;
     if (t0 != 0) {
       final now = _nowNs();
       m.recvLatency.insert((now - t0).toDouble());
       m.markRecvNowNs(now);
+    } else if ((count & 0x7F) == 1) {
+      m.markRecvNowNs(_nowNs());
     }
   }
 
   @override
   @pragma('vm:prefer-inline')
   void trySendOk(int t0) {
-    m.trySendOk++;
+    final count = ++m.trySendOk;
     if (t0 != 0) {
       final now = _nowNs();
       m.sendLatency.insert((now - t0).toDouble());
       m.markSendNowNs(now);
+    } else if ((count & 0x7F) == 1) {
+      m.markSendNowNs(_nowNs());
     }
   }
 
@@ -65,11 +71,13 @@ final class ActiveMetricsRecorder implements MetricsRecorder {
   @override
   @pragma('vm:prefer-inline')
   void tryRecvOk(int t0) {
-    m.tryRecvOk++;
+    final count = ++m.tryRecvOk;
     if (t0 != 0) {
       final now = _nowNs();
       m.recvLatency.insert((now - t0).toDouble());
       m.markRecvNowNs(now);
+    } else if ((count & 0x7F) == 1) {
+      m.markRecvNowNs(_nowNs());
     }
   }
 

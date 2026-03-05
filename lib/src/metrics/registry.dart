@@ -7,7 +7,10 @@ class MetricsRegistry {
   factory MetricsRegistry() => _i;
 
   final Map<String, ChannelMetrics> _map = {};
-  final List<GlobalMetrics> _externals = [];
+  final Map<String, Map<String, ChannelSnapshot>> _externals = {};
+  final String originId =
+      DateTime.now().microsecondsSinceEpoch.toRadixString(36) +
+          (0x1000000 + (DateTime.now().hashCode % 0xFFFFFF)).toRadixString(16);
 
   ChannelMetrics attach(String id) => _map[id] ??= ChannelMetrics();
 
@@ -37,9 +40,9 @@ class MetricsRegistry {
     );
   }
 
-  void merge(GlobalMetrics other) {
+  void merge(String originId, String metricsId, ChannelSnapshot snap) {
     if (!kMetrics || !MetricsConfig.enabled) return;
-    _externals.add(other);
+    (_externals[originId] ??= {})[metricsId] = snap;
   }
 
   GlobalMetrics snapshot() {
@@ -68,8 +71,8 @@ class MetricsRegistry {
     });
 
     var snap = GlobalMetrics(DateTime.now(), snaps);
-    for (final ext in _externals) {
-      snap = snap.merge(ext);
+    for (final isolateSnaps in _externals.values) {
+      snap = snap.merge(GlobalMetrics(snap.ts, isolateSnaps));
     }
     return snap;
   }

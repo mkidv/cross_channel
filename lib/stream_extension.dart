@@ -21,48 +21,9 @@ extension StreamReceiverX<T> on KeepAliveReceiver<T> {
   /// - [closeReceiverOnDone]: If `true`, closes the receiver when stream ends
   /// - [sync]: If `true`, events are delivered synchronously
   ///
-  /// **Flutter Integration:**
-  /// ```dart
-  /// // Progress updates in multiple widgets
-  /// final (tx, rx) = XChannel.mpscLatest<double>();
-  /// final broadcast = rx.toBroadcastStream();
-  ///
-  /// // Multiple StreamBuilders can listen
-  /// StreamBuilder<double>(
-  ///   stream: broadcast,
-  ///   builder: (context, snap) => ProgressIndicator(value: snap.data),
-  /// )
-  ///
-  /// StreamBuilder<double>(
-  ///   stream: broadcast,
-  ///   builder: (context, snap) => Text('Progress: ${(snap.data ?? 0) * 100}%'),
-  /// )
-  /// ```
-  ///
-  /// **Reactive Programming:**
-  /// ```dart
-  /// // Event processing with multiple subscribers
-  /// final (tx, rx) = XChannel.mpsc<UserEvent>();
-  /// final broadcast = rx.toBroadcastStream();
-  ///
-  /// // Analytics subscriber
-  /// broadcast.listen((event) => analytics.track(event));
-  ///
-  /// // UI updates subscriber
-  /// broadcast.listen((event) => updateUI(event));
-  ///
-  /// // Logging subscriber
-  /// broadcast.listen((event) => logger.info('Event: $event'));
-  /// ```
-  ///
-  /// **Resource Management:**
-  /// ```dart
-  /// // Efficient resource usage - pause when no listeners
-  /// final broadcast = rx.toBroadcastStream(
-  ///   waitForListeners: true,    // Don't start until needed
-  ///   stopWhenNoListeners: true, // Pause when unused
-  /// );
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/stream_to_broadcast.dart}
+  /// {@end-tool}
   ///
   Stream<T> toBroadcastStream({
     bool waitForListeners = false,
@@ -142,48 +103,9 @@ extension SenderStreamX<T> on Stream<T> {
   /// - [dropWhenFull]: If `true`, drop items when channel is full (for bounded channels)
   /// - [closeSenderOnDone]: If `true`, close sender when stream completes
   ///
-  /// **HTTP Integration:**
-  /// ```dart
-  /// // Stream HTTP responses into channel processing
-  /// final (tx, rx) = XChannel.mpsc<HttpResponse>(capacity: 100);
-  ///
-  /// // Redirect HTTP stream to channel
-  /// final responseStream = httpClient.get(url).asStream();
-  /// await responseStream.redirectToSender(tx);
-  ///
-  /// // Process responses in channel consumer
-  /// await for (final response in rx.stream()) {
-  ///   final data = await response.readAsString();
-  ///   await processData(data);
-  /// }
-  /// ```
-  ///
-  /// **File Processing:**
-  /// ```dart
-  /// // Stream file lines into batch processor
-  /// final (tx, rx) = XChannel.mpsc<String>(capacity: 1000);
-  ///
-  /// final fileStream = File('large_file.txt')
-  ///   .openRead()
-  ///   .transform(utf8.decoder)
-  ///   .transform(LineSplitter());
-  ///
-  /// // Redirect file lines to channel
-  /// await fileStream.redirectToSender(tx);
-  ///
-  /// // Batch process lines
-  /// final batch = await rx.recvAll(max: 100);
-  /// await processBatch(batch.toList());
-  /// ```
-  ///
-  /// **Backpressure Strategies:**
-  /// ```dart
-  /// // Strategy 1: Wait for space (reliable)
-  /// await stream.redirectToSender(tx, dropWhenFull: false);
-  ///
-  /// // Strategy 2: Drop on full (high throughput)
-  /// await stream.redirectToSender(tx, dropWhenFull: true);
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/stream_redirect.dart}
+  /// {@end-tool}
   ///
   Future<void> redirectToSender(
     KeepAliveSender<T> tx, {

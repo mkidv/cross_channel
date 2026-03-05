@@ -10,6 +10,25 @@
 
 ---
 
+## [0.10.2] – 2026-03-05
+
+### Added
+
+- **Metric Throttling & Accuracy**:
+  - Decoupled throughput (TPS) timestamps from latency sampling, ensuring accurate performance metrics even when `sampleLatency` is disabled.
+  - Implemented a bitmask-based update for metrics timestamps to maintain high performance while ensuring metric reliability.
+  - Added `dropped` event tracking for `throttle()` and `debounce()` wrappers.
+
+### Fixed
+
+- **Remote Metrics Overwriting & Double-Counting**:
+  - Introduced `originId` in the `MetricsSync` protocol to uniquely identify metrics sources.
+  - Revamped `MetricsRegistry` to store remote snapshots per-origin and per-channel, preventing data loss when multiple channels sync from the same isolate.
+  - Fixed double-counting issues in `GlobalMetrics` merge logic by ensuring isolate-level deduplication.
+- **Wrapper Metrics Propagation**: Fixed a bug where `throttle()` and `debounce()` senders did not propagate the `metricsId` of the original sender.
+
+---
+
 ## [0.10.1] – 2026-03-05
 
 ### Added

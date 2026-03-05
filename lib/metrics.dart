@@ -4,50 +4,10 @@
 /// for channel operations. Use this for production monitoring, performance
 /// profiling, and observability in high-throughput applications.
 ///
-/// ## Quick Start
+/// ## Usage Patterns
 ///
-/// ```dart
-/// import 'package:cross_channel/metrics.dart';
-///
-/// // Enable metrics globally
-/// MetricsConfig.enabled = true;
-/// MetricsConfig.sampleLatency = true;
-/// MetricsConfig.sampleRate = 0.1; // 10% sampling
-///
-/// // Configure exporter
-/// MetricsConfig.exporter = StdExporter();
-///
-/// // Create channels with metrics
-/// final (tx, rx) = XChannel.mpsc<String>(capacity: 1000);
-///
-/// // Metrics are collected automatically
-/// await tx.send('data');
-/// final result = await rx.recv();
-/// ```
-///
-/// ## Available Exporters
-///
-/// - [NoopExporter] - Default, discards all metrics
-/// - [StdExporter] - Prints metrics to stdout with configurable intervals
-/// - [CsvExporter] - Exports metrics to CSV format (file or custom sink)
-///
-/// ## Custom Exporters
-///
-/// ```dart
-/// class MyExporter extends MetricsExporter {
-///   @override
-///   void exportSnapshot(GlobalMetrics gm) {
-///     // Process global metrics
-///   }
-///
-///   @override
-///   void exportChannel(String id, ChannelSnapshot snap) {
-///     // Process per-channel metrics
-///   }
-/// }
-///
-/// MetricsConfig.exporter = MyExporter();
-/// ```
+/// {@tool snippet example/metrics_example.dart}
+/// {@end-tool}
 ///
 /// ## Performance Impact
 ///

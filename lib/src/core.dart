@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:cross_channel/src/buffers.dart';
 import 'package:cross_channel/src/lifecycle.dart';
-import 'package:cross_channel/src/metrics/core.dart';
 import 'package:cross_channel/src/metrics/recorders.dart';
 import 'package:cross_channel/src/metrics/registry.dart';
 import 'package:cross_channel/src/ops.dart';
@@ -83,8 +82,7 @@ abstract class ChannelCore<T, Self extends Object>
       } else if (msg is ConnectSenderRequest) {
         _handleConnectSenderRequest(msg);
       } else if (msg is MetricsSync) {
-        MetricsRegistry().merge(
-            GlobalMetrics(DateTime.now(), {msg.metricsId: msg.snapshot}));
+        MetricsRegistry().merge(msg.originId, msg.metricsId, msg.snapshot);
       } else if (msg is FlowCredit) {
         for (final c in _connectedSenders) {
           c.handleRemoteMessage(msg);
@@ -415,6 +413,7 @@ void _syncMetricsRemote(PlatformPort port, String? metricsId) {
   final snap = MetricsRegistry().channelSnapshot(metricsId);
   if (snap == null) return;
   try {
-    port.send(MetricsSync(metricsId, snap).toTransferable());
+    port.send(MetricsSync(metricsId, MetricsRegistry().originId, snap)
+        .toTransferable());
   } catch (_) {}
 }

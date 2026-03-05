@@ -41,43 +41,9 @@ extension SendPortRequestX on SendPort {
   /// - [data]: Optional data payload to include with the request
   /// - [timeout]: Maximum time to wait for a response (default: 3 seconds)
   ///
-  /// **Background Processing Example:**
-  /// ```dart
-  /// // Main isolate - send heavy computation to worker
-  /// final result = await workerPort.request<ComputationResult>(
-  ///   'compute_statistics',
-  ///   data: {
-  ///     'dataset': millionRecords,
-  ///     'algorithm': 'advanced_analysis'
-  ///   },
-  ///   timeout: Duration(minutes: 10),
-  /// );
-  ///
-  /// print('Computation complete: ${result.summary}');
-  /// ```
-  ///
-  /// **Image Processing Example:**
-  /// ```dart
-  /// // Offload image processing to background isolate
-  /// final processedImage = await imageWorkerPort.request<Uint8List>(
-  ///   'apply_filters',
-  ///   data: {
-  ///     'image_data': originalImageBytes,
-  ///     'filters': ['blur', 'sharpen', 'contrast'],
-  ///   },
-  /// );
-  /// ```
-  ///
-  /// **Error Handling:**
-  /// ```dart
-  /// try {
-  ///   final result = await workerPort.request<String>('process');
-  /// } on TimeoutException {
-  ///   print('Worker took too long to respond');
-  /// } on StateError catch (e) {
-  ///   print('Worker returned error: $e');
-  /// }
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/isolate_example.dart}
+  /// {@end-tool}
   ///
   Future<R> request<R>(
     String command, {

@@ -19,22 +19,9 @@ export 'src/result.dart';
 /// - **SPSC**: Single-producer, single-consumer (ultra-low latency)
 /// - **OneShot**: Single-value delivery (request/reply patterns)
 ///
-/// ## Quick Start
-///
-/// ```dart
-/// import 'package:cross_channel/cross_channel.dart';
-///
-/// // Task queue with backpressure
-/// final (tx, rx) = XChannel.mpsc<String>(capacity: 100);
-///
-/// // Producer
-/// await tx.send('task 1');
-///
-/// // Consumer
-/// await for (final task in rx.stream()) {
-///   print('Processing: $task');
-/// }
-/// ```
+/// **Usage:**
+/// {@tool snippet example/cross_channel_example.dart}
+/// {@end-tool}
 ///
 /// ## Capacity Rules
 /// - `capacity: null` → Unbounded channel (producers never block)
@@ -59,43 +46,13 @@ final class XChannel {
   /// - [onDrop]: Optional callback invoked when items are dropped
   /// - [chunked]: Use optimized chunked buffer for hot paths (default: `true`)
   ///
-  /// **Examples:**
-  ///
-  /// ```dart
-  /// // Unbounded task queue
-  /// final (tx, rx) = XChannel.mpsc<String>();
-  ///
-  /// // Bounded with backpressure
-  /// final (tx, rx) = XChannel.mpsc<String>(capacity: 100);
-  ///
-  /// // Sliding window (drop oldest)
-  /// final (tx, rx) = XChannel.mpsc<String>(
-  ///   capacity: 50,
-  ///   policy: DropPolicy.oldest,
-  ///   onDrop: (task) => print('Dropped: $task'),
-  /// );
-  ///
-  /// // Rendezvous (direct handoff)
-  /// final (tx, rx) = XChannel.mpsc<String>(capacity: 0);
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/cross_channel_example.dart}
+  /// {@end-tool}
   ///
   /// **Usage Pattern:**
-  /// ```dart
-  /// // Multiple producers
-  /// final producer1 = () async {
-  ///   await tx.send('task from producer 1');
-  /// };
-  /// final producer2 = () async {
-  ///   await tx.send('task from producer 2');
-  /// };
-  ///
-  /// // Single consumer
-  /// final consumer = () async {
-  ///   await for (final task in rx.stream()) {
-  ///     // Process task
-  ///   }
-  /// };
-  /// ```
+  /// {@tool snippet example/cross_channel_example.dart}
+  /// {@end-tool}
   ///
   /// **See also:**
   /// - [XChannel.mpmc] for multi-consumer work distribution
@@ -127,29 +84,9 @@ final class XChannel {
   /// - [onDrop]: Optional callback invoked when items are dropped
   /// - [chunked]: Use optimized chunked buffer for hot paths (default: `true`)
   ///
-  /// **Examples:**
-  ///
-  /// ```dart
-  /// // Worker pool with 3 competing consumers
-  /// final (tx, rx0) = XChannel.mpmc<Job>(capacity: 100);
-  /// final rx1 = rx0.clone();
-  /// final rx2 = rx0.clone();
-  ///
-  /// // Multiple workers processing jobs
-  /// Future<void> worker(int id, MpmcReceiver<Job> rx) async {
-  ///   await for (final job in rx.stream()) {
-  ///     print('Worker $id processing job');
-  ///     await job.process();
-  ///   }
-  /// }
-  ///
-  /// // Start workers
-  /// final workers = [
-  ///   worker(0, rx0),
-  ///   worker(1, rx1),
-  ///   worker(2, rx2),
-  /// ];
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/cross_channel_example.dart}
+  /// {@end-tool}
   ///
   /// **Key Differences from MPSC:**
   /// - Multiple consumers compete for messages (work-stealing)
@@ -183,37 +120,9 @@ final class XChannel {
   /// - [consumeOnce]: If `true`, first receiver consumes and disconnects others.
   ///   If `false`, all receivers observe the same value.
   ///
-  /// **Examples:**
-  ///
-  /// ```dart
-  /// // Request/reply pattern (consume once)
-  /// final (tx, rx) = XChannel.oneshot<String>(consumeOnce: true);
-  ///
-  /// // Send reply
-  /// await tx.send('response data');
-  ///
-  /// // First receiver gets the value
-  /// final result = await rx.recv();
-  /// print(result.valueOrNull); // 'response data'
-  ///
-  /// // Subsequent receivers get disconnected
-  /// final result2 = await rx.recv();
-  /// print(result2.isDisconnected); // true
-  /// ```
-  ///
-  /// ```dart
-  /// // Broadcast signal (multiple observers)
-  /// final (tx, rx) = XChannel.oneshot<bool>(consumeOnce: false);
-  ///
-  /// // Multiple listeners can observe the same value
-  /// final listener1 = rx.recv();
-  /// final listener2 = rx.recv();
-  ///
-  /// await tx.send(true);
-  ///
-  /// print(await listener1); // RecvOk(true)
-  /// print(await listener2); // RecvOk(true)
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/cross_channel_example.dart}
+  /// {@end-tool}
   ///
   /// **Use Cases:**
   /// - HTTP request/response patterns
@@ -239,22 +148,9 @@ final class XChannel {
   /// **Parameters:**
   /// - [capacity]: Ring buffer size (will be rounded to next power of 2)
   ///
-  /// **Examples:**
-  ///
-  /// ```dart
-  /// // Performance-sensitive data stream
-  /// final (tx, rx) = XChannel.spsc<double>(capacity: 1024);
-  ///
-  /// // Producer (single thread/isolate)
-  /// for (var i = 0; i < 1000000; i++) {
-  ///   await tx.send(i * 0.1);
-  /// }
-  ///
-  /// // Consumer (single thread/isolate)
-  /// await for (final value in rx.stream()) {
-  ///   processData(value);
-  /// }
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/cross_channel_example.dart}
+  /// {@end-tool}
   ///
   /// **Performance Notes:**
   /// - High-performance channel type (~1.76-1.80 Mops/s, see benchmarks)
@@ -276,23 +172,9 @@ final class XChannel {
   /// the most recent value matters. New sends overwrite older ones.
   /// **Performance: ~135 Mops/s** - extremely fast due to coalescing.
   ///
-  /// **Examples:**
-  ///
-  /// ```dart
-  /// // Progress updates
-  /// final (tx, rx) = XChannel.mpscLatest<double>();
-  ///
-  /// // Rapid progress updates (only latest matters)
-  /// for (var i = 0; i <= 100; i++) {
-  ///   tx.trySend(i / 100.0); // Non-blocking
-  ///   // Intermediate values may be coalesced
-  /// }
-  ///
-  /// // UI updates with latest progress
-  /// await for (final progress in rx.stream()) {
-  ///   updateProgressBar(progress);
-  /// }
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/cross_channel_example.dart}
+  /// {@end-tool}
   ///
   /// **Use Cases:**
   /// - Progress bars and loading indicators
@@ -312,21 +194,9 @@ final class XChannel {
   /// only **one** consumer receives each update. Perfect for load balancing
   /// latest-only work across multiple workers.
   ///
-  /// **Examples:**
-  ///
-  /// ```dart
-  /// // Latest price updates distributed to workers
-  /// final (tx, rx0) = XChannel.mpmcLatest<PriceUpdate>();
-  /// final rx1 = rx0.clone();
-  /// final rx2 = rx0.clone();
-  ///
-  /// // Workers compete for latest price updates
-  /// Future<void> priceWorker(int id, MpmcReceiver<PriceUpdate> rx) async {
-  ///   await for (final update in rx.stream()) {
-  ///     print('Worker $id processing latest price: ${update.price}');
-  ///   }
-  /// }
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/cross_channel_example.dart}
+  /// {@end-tool}
   ///
   /// **Key Points:**
   /// - Only one consumer gets each update (competitive, not broadcast)
@@ -347,19 +217,9 @@ final class XChannel {
   /// **Parameters:**
   /// - [capacity]: Buffer size (fixed, power of 2).
   ///
-  /// **Examples:**
-  ///
-  /// ```dart
-  /// final (tx, broadcast) = XChannel.broadcast<Event>(capacity: 1024);
-  ///
-  /// // Subscriber 1
-  /// final sub1 = broadcast.subscribe();
-  ///
-  /// // Subscriber 2 (replays last 10 events)
-  /// final sub2 = broadcast.subscribe(replay: 10);
-  ///
-  /// tx.send(Event());
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/cross_channel_example.dart}
+  /// {@end-tool}
   static BroadcastChannel<T> broadcast<T>(
       {required int capacity, String? metricsId}) {
     return Broadcast.channel<T>(capacity, metricsId: metricsId);

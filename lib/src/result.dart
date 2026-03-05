@@ -1,3 +1,7 @@
+library;
+
+import 'package:cross_channel/src/core.dart';
+
 /// Result types for type-safe channel operations without exceptions.
 ///
 /// All channel operations return explicit result types instead of throwing exceptions.
@@ -20,35 +24,8 @@
 ///
 /// ## Usage Patterns
 ///
-/// **Pattern Matching:**
-/// ```dart
-/// final result = await tx.send('data');
-/// switch (result) {
-///   case SendOk():
-///     print('Sent successfully');
-///     break;
-///   case SendErrorFull():
-///     print('Channel full, try again later');
-///     break;
-///   case SendErrorDisconnected():
-///     print('No receivers available');
-///     break;
-///   case SendError():
-///     print('Unexpected error');
-///     break;
-/// }
-/// ```
-///
-/// **Extension Methods:**
-/// ```dart
-/// final result = tx.trySend('data');
-/// if (result.hasSend) {
-///   print('Success!');
-/// } else if (result.isFull) {
-///   await tx.send('data'); // Wait for space
-/// }
-/// ```
-library;
+/// {@tool snippet example/result_example.dart}
+/// {@end-tool}
 
 /// Result of a channel send operation.
 ///

@@ -19,22 +19,8 @@ import 'package:cross_channel/src/core.dart';
 /// ## Usage Patterns
 ///
 /// **Responsive UI with timeout:**
-/// ```dart
-/// final result = await XSelect.run<String>((s) => s
-///   ..onRecvValue(dataChannel, (data) => 'got_data: $data')
-///   ..onTick(Ticker.every(Duration(seconds: 1)), () => 'heartbeat')
-///   ..onTimeout(Duration(seconds: 30), () => 'timeout_reached')
-/// );
-///
-/// switch (result) {
-///   case 'timeout_reached':
-///     showTimeoutMessage();
-///   case String data when data.startsWith('got_data'):
-///     processData(data);
-///   case 'heartbeat':
-///     updateHeartbeat();
-/// }
-/// ```
+/// {@tool snippet example/select_example.dart}
+/// {@end-tool}
 ///
 /// **Multi-source event aggregation:**
 /// ```dart
@@ -67,7 +53,7 @@ class XSelect {
   ///
   /// **Parameters:**
   /// - [build]: Builder function to configure the selection branches
-  /// - [onTimeout]: Optional global timeout for the entire selection
+  /// - [SelectBuilder.onTimeout]: Optional global timeout for the entire selection
   /// - [ordered]: If `true`, evaluates branches in order; if `false`, uses fairness rotation
   ///
   /// **Example - Event-driven architecture:**
@@ -75,13 +61,12 @@ class XSelect {
   /// // WebSocket server with graceful shutdown and health checks
   /// class WebSocketManager {
   ///   final _commands = XChannel.mpsc<ServerCommand>(capacity: 100);
-  ///   final _health = Ticker.every(Duration(seconds: 30));
   ///
   ///   Future<void> eventLoop() async {
   ///     while (true) {
   ///       final action = await XSelect.run<String>((s) => s
   ///         ..onRecvValue(_commands, (cmd) => _handleCommand(cmd))
-  ///         ..onTick(_health, () => 'health_check')
+  ///         ..onTick(Duration(seconds: 30), () => 'health_check')
   ///         ..onStream(websocketStream, (msg) => _handleWebSocket(msg))
   ///         ..onTimeout(Duration(minutes: 5), () => 'idle_timeout')
   ///       );
@@ -96,7 +81,6 @@ class XSelect {
   ///
   /// **See also:**
   /// - [SelectBuilder] for available operations
-  /// - [Ticker] for timer-based operations
   /// - [XChannel] for channel-based communication
   static Future<R> run<R>(
     void Function(SelectBuilder<R>) build, {
@@ -480,8 +464,6 @@ class SelectBuilder<R> {
     return this;
   }
 
-  /// Wait for a ticker to fire.
-  ///
   /// Tickers provide recurring timer events. Use this for periodic operations,
   /// heartbeats, or any regular interval-based processing.
   ///
@@ -499,7 +481,7 @@ class SelectBuilder<R> {
   ///     ..onRecvValue(requests, (req) => ServerAction.handleRequest(req))
   ///     ..onTick(Duration(seconds: 5), () => ServerAction.heartbeat())
   ///     ..onTick(Duration(minutes: 1), () => ServerAction.healthCheck())
-  ///     ..timeout(Duration(minutes: 30), () => ServerAction.idleShutdown())
+  ///     ..onTimeout(Duration(minutes: 30), () => ServerAction.idleShutdown())
   ///   );
   ///
   ///   await server.processAction(action);

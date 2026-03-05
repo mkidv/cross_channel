@@ -10,39 +10,21 @@ import 'package:cross_channel/src/result.dart';
 /// Essential for building robust systems with predictable behavior.
 ///
 /// **Usage:**
-/// ```dart
-/// import 'package:cross_channel/cross_channel.dart';
-///
-/// final result = await tx.sendTimeout(value, Duration(seconds: 5));
-/// if (result.isTimeout) {
-///   print('Send timed out, implementing fallback');
-/// }
-/// ```
+/// {@tool snippet example/send_timeout_example.dart}
+/// {@end-tool}
 extension SenderTimeoutX<T> on Sender<T> {
   /// Send a value with a timeout to prevent indefinite blocking.
   ///
   /// Returns [SendErrorTimeout] if the operation doesn't complete within
-  /// the specified [duration]. Useful for implementing deadlock-free systems.
+  /// the specified [d]. Useful for implementing deadlock-free systems.
   ///
   /// **Parameters:**
   /// - [v]: The value to send
   /// - [d]: Maximum time to wait for the send to complete
   ///
-  /// **Example:**
-  /// ```dart
-  /// // Robust producer with timeout
-  /// for (final item in workItems) {
-  ///   final result = await tx.sendTimeout(item, Duration(seconds: 10));
-  ///   switch (result) {
-  ///     case SendOk():
-  ///       continue; // Success
-  ///     case SendErrorTimeout():
-  ///       print('Send timed out, skipping item');
-  ///     case SendErrorDisconnected():
-  ///       return; // No consumers
-  ///   }
-  /// }
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/send_timeout_example.dart}
+  /// {@end-tool}
   Future<SendResult> sendTimeout(T v, Duration d) async {
     try {
       return await send(v).timeout(
@@ -61,37 +43,20 @@ extension SenderTimeoutX<T> on Sender<T> {
 /// Critical for building responsive applications that don't hang waiting for data.
 ///
 /// **Usage:**
-/// ```dart
-/// final result = await rx.recvTimeout(Duration(seconds: 3));
-/// if (result.isTimeout) {
-///   print('No data received, using default');
-/// }
-/// ```
+/// {@tool snippet example/recv_timeout_example.dart}
+/// {@end-tool}
 extension ReceiverTimeoutX<T> on Receiver<T> {
   /// Receive a value with a timeout to prevent indefinite waiting.
   ///
   /// Returns [RecvErrorTimeout] if no value arrives within the specified
-  /// [duration]. For cancelable receivers, properly cancels the operation.
+  /// [d]. For cancelable receivers, properly cancels the operation.
   ///
   /// **Parameters:**
   /// - [d]: Maximum time to wait for a value
   ///
-  /// **Example:**
-  /// ```dart
-  /// // Responsive consumer with fallback
-  /// while (true) {
-  ///   final result = await rx.recvTimeout(Duration(seconds: 5));
-  ///   switch (result) {
-  ///     case RecvOk<String>(value: final data):
-  ///       processData(data);
-  ///     case RecvErrorTimeout():
-  ///       print('No data in 5s, sending heartbeat');
-  ///       sendHeartbeat();
-  ///     case RecvErrorDisconnected():
-  ///       return; // Channel closed
-  ///   }
-  /// }
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/recv_timeout_example.dart}
+  /// {@end-tool}
   Future<RecvResult<T>> recvTimeout(Duration d) {
     if (this is KeepAliveReceiver<T>) {
       final (fut, cancel) = (this as KeepAliveReceiver<T>).recvCancelable();
@@ -110,27 +75,17 @@ extension ReceiverTimeoutX<T> on Receiver<T> {
 /// for handling backpressure and disconnection.
 ///
 /// **Usage:**
-/// ```dart
-/// final items = ['task1', 'task2', 'task3'];
-///
-/// // Best effort (may drop on full)
-/// await tx.trySendAll(items);
-///
-/// // With backpressure (waits when full)
-/// await tx.sendAll(items);
-/// ```
+/// {@tool snippet example/batch_example.dart}
+/// {@end-tool}
 extension SenderBatchX<T> on Sender<T> {
   /// Send all items using [trySend] without waiting (best-effort).
   ///
   /// If the channel becomes full, items are silently dropped. Use this when
   /// you want maximum throughput and can tolerate data loss.
   ///
-  /// **Example:**
-  /// ```dart
-  /// // High-throughput logging (ok to drop on full)
-  /// final logs = generateLogEntries();
-  /// await tx.trySendAll(logs); // Fast, may drop some logs
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/batch_example.dart}
+  /// {@end-tool}
   Future<void> trySendAll(Iterable<T> it) async {
     for (final v in it) {
       trySend(v);
@@ -142,12 +97,9 @@ extension SenderBatchX<T> on Sender<T> {
   /// Uses [trySend] first for speed, then falls back to [send] if the channel
   /// is full. Stops immediately if the channel becomes disconnected.
   ///
-  /// **Example:**
-  /// ```dart
-  /// // Reliable batch processing
-  /// final batch = await loadWorkBatch();
-  /// await tx.sendAll(batch); // Ensures all items are sent
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/batch_example.dart}
+  /// {@end-tool}
   Future<void> sendAll(Iterable<T> it) async {
     for (final v in it) {
       final r = trySend(v);
@@ -166,16 +118,8 @@ extension SenderBatchX<T> on Sender<T> {
 /// for handling timeouts and limits. Essential for batch processing.
 ///
 /// **Usage:**
-/// ```dart
-/// // Drain all immediately available
-/// final available = rx.tryRecvAll(max: 100);
-///
-/// // Wait and batch with timeout
-/// final batch = await rx.recvAll(
-///   idle: Duration(milliseconds: 100),
-///   max: 50,
-/// );
-/// ```
+/// {@tool snippet example/batch_example.dart}
+/// {@end-tool}
 extension ReceiverDrainX<T> on Receiver<T> {
   /// Drain all immediately available values without waiting.
   ///
@@ -185,14 +129,9 @@ extension ReceiverDrainX<T> on Receiver<T> {
   /// **Parameters:**
   /// - [max]: Maximum number of items to receive (default: unlimited)
   ///
-  /// **Example:**
-  /// ```dart
-  /// // Process all available log entries
-  /// final logs = rx.tryRecvAll(max: 1000);
-  /// if (logs.isNotEmpty) {
-  ///   await processBatchLogs(logs);
-  /// }
-  /// ```
+  /// **Usage:**
+  /// {@tool snippet example/batch_example.dart}
+  /// {@end-tool}
   Iterable<T> tryRecvAll({int? max}) {
     final out = <T>[];
     final limit = max ?? 0x7fffffff;
@@ -216,25 +155,9 @@ extension ReceiverDrainX<T> on Receiver<T> {
   /// - [idle]: Maximum time to wait for additional values after receiving one
   /// - [max]: Maximum number of items to receive (default: unlimited)
   ///
-  /// **Example:**
-  /// ```dart
-  /// // Efficient batch processing with 100ms batching window
-  /// while (true) {
-  ///   final batch = await rx.recvAll(
-  ///     idle: Duration(milliseconds: 100),
-  ///     max: 50,
-  ///   );
-  ///
-  ///   if (batch.isNotEmpty) {
-  ///     await processBatch(batch.toList());
-  ///   } else {
-  ///     // Channel closed or timed out
-  ///     break;
-  ///   }
-  ///   }
-  ///   return out;
-  ///   }
-  /// }
+  /// **Usage:**
+  /// {@tool snippet example/batch_example.dart}
+  /// {@end-tool}
   Future<Iterable<T>> recvAll({Duration idle = Duration.zero, int? max}) async {
     final out = <T>[];
     final limit = max ?? 0x7fffffff;
@@ -267,11 +190,11 @@ extension SenderRateLimitX<T> on Sender<T> {
   /// Events sent during the "cooldown" period are **dropped**.
   /// The first event is sent immediately, then the cooldown starts.
   ///
-  /// **Returns:**
-  /// - [SendOk] if sent or dropped (dropped events are considered "handled").
-  /// - Other errors (disconnected/closed) are propagated.
+  /// **Usage:**
+  /// {@tool snippet example/rate_limit_example.dart}
+  /// {@end-tool}
   Sender<T> throttle(Duration duration) {
-    return _ThrottleSender(this, duration);
+    return _ThrottleSender(this, duration, metricsId: metricsId);
   }
 
   /// Returns a sender that delays events until [duration] has passed since the last event.
@@ -279,21 +202,21 @@ extension SenderRateLimitX<T> on Sender<T> {
   /// Useful for search inputs or bursty events where only the final resting state matters.
   /// unique per [send] call.
   ///
-  /// **Behavior:**
-  /// - `send()` returns [SendOk] **immediately** (fire-and-forget).
-  /// - The actual send happens asynchronously after the delay.
-  /// - If a new event arrives before the delay expires, the previous timer is cancelled
-  ///   (the previous event is dropped).
+  /// **Usage:**
+  /// {@tool snippet example/rate_limit_example.dart}
+  /// {@end-tool}
   Sender<T> debounce(Duration duration) {
-    return _DebounceSender(this, duration);
+    return _DebounceSender(this, duration, metricsId: metricsId);
   }
 }
 
 final class _ThrottleSender<T> extends Sender<T> implements Closeable {
   final Sender<T> _inner;
   final Duration _duration;
+  @override
+  final String? metricsId;
 
-  _ThrottleSender(this._inner, this._duration);
+  _ThrottleSender(this._inner, this._duration, {this.metricsId});
 
   int _lastSend = 0;
 
@@ -316,6 +239,7 @@ final class _ThrottleSender<T> extends Sender<T> implements Closeable {
       return _inner.send(value);
     }
     // Dropped
+    mx.markDropOldest();
     return Future.value(const SendOk());
   }
 
@@ -328,6 +252,7 @@ final class _ThrottleSender<T> extends Sender<T> implements Closeable {
       _lastSend = now;
       return _inner.trySend(value);
     }
+    mx.markDropOldest();
     return const SendOk();
   }
 
@@ -340,8 +265,10 @@ final class _ThrottleSender<T> extends Sender<T> implements Closeable {
 final class _DebounceSender<T> extends Sender<T> implements Closeable {
   final Sender<T> _inner;
   final Duration _duration;
+  @override
+  final String? metricsId;
 
-  _DebounceSender(this._inner, this._duration);
+  _DebounceSender(this._inner, this._duration, {this.metricsId});
 
   Timer? _timer;
 
@@ -358,7 +285,10 @@ final class _DebounceSender<T> extends Sender<T> implements Closeable {
   Future<SendResult> send(T value) {
     if (_inner.isSendClosed) return Future.value(const SendErrorDisconnected());
 
-    _timer?.cancel();
+    if (_timer != null) {
+      mx.markDropOldest();
+      _timer!.cancel();
+    }
     _timer = Timer(_duration, () {
       _timer = null;
       // Best-effort send.
@@ -372,7 +302,10 @@ final class _DebounceSender<T> extends Sender<T> implements Closeable {
   SendResult trySend(T value) {
     if (_inner.isSendClosed) return const SendErrorDisconnected();
     // Debounce implies waiting, so trySend (sync) acts same as send (schedule timer).
-    _timer?.cancel();
+    if (_timer != null) {
+      mx.markDropOldest();
+      _timer!.cancel();
+    }
     _timer = Timer(_duration, () {
       _timer = null;
       _inner.send(value);

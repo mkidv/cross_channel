@@ -160,11 +160,11 @@ void main() {
 
     test('merge adds external metrics to snapshot', () {
       final reg = MetricsRegistry();
-      final extMap = {'ext_ch': ChannelSnapshot(sent: 50)};
-      final extGm = GlobalMetrics(DateTime.now(), extMap);
+      // final extMap = {'ext_ch': ChannelSnapshot(sent: 50)};
+      // final extGm = GlobalMetrics(DateTime.now(), extMap);
 
       MetricsConfig.enabled = true;
-      reg.merge(extGm);
+      reg.merge('source1', 'ext_ch', const ChannelSnapshot(sent: 50));
 
       final snap = reg.snapshot();
       expect(snap.channels['ext_ch']?.sent, 50);

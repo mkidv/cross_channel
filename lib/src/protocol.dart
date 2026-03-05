@@ -28,6 +28,7 @@ sealed class ControlMessage {
       'BatchMessage' => BatchMessage(map['values']! as List),
       'MetricsSync' => MetricsSync(
           map['metricsId']! as String,
+          map['originId']! as String,
           ChannelSnapshot.fromTransferable(
               map['snapshot']! as Map<Object?, Object?>)),
       _ => null,
@@ -111,14 +112,16 @@ final class FlowCredit extends ControlMessage {
 /// Syncs metrics from a remote sender/receiver to the channel's parent isolate.
 final class MetricsSync extends ControlMessage {
   final String metricsId;
+  final String originId;
   final ChannelSnapshot snapshot;
 
-  const MetricsSync(this.metricsId, this.snapshot);
+  const MetricsSync(this.metricsId, this.originId, this.snapshot);
 
   @override
   Map<String, Object?> toTransferable() => {
         '#cc': 'MetricsSync',
         'metricsId': metricsId,
+        'originId': originId,
         'snapshot': snapshot.toTransferable(),
       };
 }

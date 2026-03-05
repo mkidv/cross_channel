@@ -14,52 +14,8 @@ import 'dart:async';
 ///
 /// ## Usage Patterns
 ///
-/// **Basic signaling:**
-/// ```dart
-/// final notify = Notify();
-///
-/// // Waiter
-/// final (future, cancel) = notify.notified();
-/// await future; // Waits until notified
-///
-/// // Notifier
-/// notify.notifyOne(); // Wakes one waiter
-/// ```
-///
-/// **Configuration reload pattern:**
-/// ```dart
-/// final configChanged = Notify();
-///
-/// // Worker listening for config changes
-/// Future<void> worker() async {
-///   while (!shutdown) {
-///     final (notified, cancel) = configChanged.notified();
-///
-///     // Race between work and config changes
-///     await XSelect.run((s) => s
-///       ..onFuture(notified, (_) => 'config_changed')
-///       ..onTick(Ticker.every(Duration(seconds: 1)), () => 'work')
-///     );
-///
-///     reloadConfig();
-///   }
-/// }
-///
-/// // Trigger config reload
-/// configChanged.notifyAll(); // Wake all workers
-/// ```
-///
-/// **Shutdown coordination:**
-/// ```dart
-/// final shutdown = Notify();
-///
-/// // Graceful shutdown
-/// Future<void> gracefulShutdown() async {
-///   shutdown.notifyAll(); // Signal all workers
-///   await Future.delayed(Duration(seconds: 5)); // Grace period
-///   shutdown.close(); // Force remaining waiters to fail
-/// }
-/// ```
+/// {@tool snippet example/notify_example.dart}
+/// {@end-tool}
 ///
 /// ## When to use Notify vs Channels
 /// - **Use Notify for**: Config changes, shutdown signals, flush commands,
@@ -162,12 +118,8 @@ class Notify {
   /// - "Check your state" broadcast
   ///
   /// **Example:**
-  /// ```dart
-  /// // Graceful shutdown - wake all workers
-  /// void initiateShutdown() {
-  ///   shutdownFlag.notifyAll(); // All workers check shutdown state
-  /// }
-  /// ```
+  /// {@tool snippet example/notify_notify_all.dart}
+  /// {@end-tool}
   void notifyAll() {
     if (_closed) return;
     _epoch++;
@@ -200,14 +152,8 @@ class Notify {
   /// All currently waiting tasks will fail with [StateError], and any
   /// future calls to [notified] will return a failed future.
   ///
-  /// **Example:**
-  /// ```dart
-  /// // Force shutdown after grace period
-  /// Future<void> forceShutdown() async {
-  ///   await Future.delayed(Duration(seconds: 30)); // Grace period
-  ///   shutdownNotify.close(); // Force all remaining waiters to fail
-  /// }
-  /// ```
+  /// {@tool snippet example/notify_close.dart}
+  /// {@end-tool}
   void close() {
     if (_closed) return;
     _closed = true;
