@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:cross_channel/mpsc.dart';
 import 'package:test/test.dart';
 
@@ -73,8 +74,8 @@ void main() {
         expect(seen, [0, 1, 2, 3, 4]);
 
         expect(
-          () => rx.stream().listen((_) {}).asFuture<void>(),
-          throwsA(isA<StateError>()),
+          rx.stream,
+          throwsStateError,
         );
       },
     );

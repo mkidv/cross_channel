@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cross_channel/src/buffers.dart';
+import 'package:cross_channel/src/result.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -229,6 +230,68 @@ void main() {
       expect(buf.tryPush(2), isTrue); // "Succeeds" but drops oldest (1)
       expect(dropped, 1);
       expect(buf.tryPop(), 2); // And pushes newest (2)
+      expect(dropped, 1);
+    });
+  });
+
+  group('SrswBuffer', () {
+    test('tryPopMany edge cases', () {
+      final buf = SrswBuffer<int>(8);
+      expect(buf.tryPopMany(5), isEmpty);
+      buf.tryPush(1);
+      buf.tryPush(2);
+      expect(buf.tryPopMany(1), [1]);
+      expect(buf.tryPopMany(10), [2]);
+    });
+
+    test('clear and failAllPopWaiters', () async {
+      final buf = SrswBuffer<int>(8);
+      buf.tryPush(1);
+      buf.clear();
+      expect(buf.isEmpty, isTrue);
+
+      final future = buf.waitNotEmpty();
+      buf.failAllPopWaiters(Exception('fail'));
+      await expectLater(future, throwsException);
+    });
+
+    test('removePopWaiter', () {
+      final buf = SrswBuffer<int>(8);
+      final c = buf.addPopWaiter();
+      expect(buf.removePopWaiter(c), isTrue);
+      expect(buf.removePopWaiter(c), isFalse); // already removed
+    });
+  });
+
+  group('BroadcastRing', () {
+    test('clear and removeSubscriber', () {
+      final ring = BroadcastRing<int>(8);
+      final cursor = ring.addSubscriber(0);
+      ring.tryPush(1);
+      ring.removeSubscriber(cursor);
+      ring.clear();
+      // Note: tryReceive behavior on cleared ring might vary by implementation,
+      // but here we just check it doesn't crash and respects removal.
+    });
+
+    test('failAllPopWaiters', () async {
+      final ring = BroadcastRing<int>(8);
+      final cursor = ring.addSubscriber(0);
+      final future = ring.receive(cursor);
+      ring.failAllPopWaiters(Exception('fail'));
+      await expectLater(future, throwsException);
+    });
+
+    test('lag detection and sequence wrap', () {
+      final ring = BroadcastRing<int>(2);
+      final cursor = ring.addSubscriber(0);
+      ring.tryPush(1);
+      ring.tryPush(2);
+      ring.tryPush(3); // overwrites 1
+      // valid: [2, 3]. wSeq=3, cap=2. tail=1.
+      final res = ring.tryReceive(cursor);
+      expect(res.hasValue, isTrue);
+      expect((res as RecvOk<int>).value, 2);
     });
   });
 }

@@ -23,6 +23,10 @@
   - Significantly improved examples for `SendResult` and `RecvResult` pattern matching.
   - Added more exhaustive inline documentation for `XChannel` factory methods.
 
+### Fixed
+
+- **Single-Subscription Enforcement**: `Receiver.stream()` now throws `StateError` immediately upon invocation if the receiver has already been consumed, rather than delaying the check until the stream is listened to. Fixed for SPSC, MPSC, and MPMC channels.
+
 ### Removed
 
 - **Obsolete Snippets Tool**: Removed `tool/snippet.dart` as examples are now maintained directly inline.

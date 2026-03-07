@@ -81,7 +81,7 @@ final class SrswBuffer<T> implements ChannelBuffer<T> {
   @override
   Future<void> waitNotEmpty() async {
     if (!isEmpty) return;
-    final c = Completer<void>.sync();
+    final c = Completer<void>();
     _notEmptyWaiters.addLast(c);
     await c.future;
   }

@@ -97,5 +97,36 @@ void main() {
       final end = await rx.recv();
       expect(end.isDisconnected, isTrue);
     });
+
+    test('Spsc.unbounded creation (chunked vs simple)', () {
+      final (tx1, rx1) = Spsc.unbounded<int>();
+      expect(tx1, isA<SpscSender<int>>());
+      tx1.trySend(1);
+      expect(rx1.tryRecv().valueOrNull, 1);
+
+      final (tx2, rx2) = Spsc.unbounded<int>(chunked: false);
+      expect(tx2, isA<SpscSender<int>>());
+      tx2.trySend(2);
+      expect(rx2.tryRecv().valueOrNull, 2);
+    });
+
+    test('Receiver.stream() single-subscription constraint', () async {
+      final (_, rx) = Spsc.channel<int>(8);
+
+      rx.stream().listen((_) {});
+
+      expect(rx.stream, throwsStateError);
+    });
+
+    test('close() idempotence and state properties', () {
+      final (tx, rx) = Spsc.channel<int>(8);
+      tx.close();
+      tx.close(); // Idempotent
+      expect(tx.isSendClosed, isTrue);
+
+      rx.close();
+      rx.close(); // Idempotent
+      expect(rx.isRecvClosed, isTrue);
+    });
   });
 }

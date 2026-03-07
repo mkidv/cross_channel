@@ -90,8 +90,8 @@ void main() {
         expect(values, [1]);
 
         expect(
-          () => rx.stream().listen((_) {}).asFuture<void>(),
-          throwsA(isA<StateError>()),
+          rx.stream,
+          throwsStateError,
         );
 
         final (tx2, rx2) = Mpmc.unbounded<int>();

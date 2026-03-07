@@ -101,5 +101,43 @@ void main() {
 
       tx.close();
     });
+
+    test('Broadcast transferable handles (simulation)', () async {
+      final (tx, bc) = Broadcast.channel<int>(16);
+      final sub = bc.subscribe();
+
+      final bcData = tx.toTransferable();
+      final rxData = sub.toTransferable();
+
+      final remoteTx = BroadcastSender<int>.fromTransferable(bcData);
+      final remoteRx = BroadcastReceiver<int>.fromTransferable(rxData);
+
+      expect(remoteTx.channelId, -1);
+      expect(remoteRx.channelId, -1);
+
+      remoteTx.close();
+      remoteRx.close();
+    });
+
+    test('Replay edge cases', () async {
+      final (tx, bc) = Broadcast.channel<int>(4);
+
+      // Empty buffer
+      final sub1 = bc.subscribe(replay: 1);
+      expect(sub1.tryRecv().isEmpty, isTrue);
+
+      // Partial buffer
+      tx.trySend(1);
+      final sub2 = bc.subscribe(replay: 1);
+      expect(sub2.tryRecv().valueOrNull, 1);
+
+      // Full buffer + overflow
+      tx.trySend(2);
+      tx.trySend(3);
+      tx.trySend(4);
+      tx.trySend(5); // 1 is overwritten
+      final sub3 = bc.subscribe(replay: 10); // Request more than cap
+      expect(sub3.tryRecv().valueOrNull, 2); // Should get oldest available (2)
+    });
   });
 }

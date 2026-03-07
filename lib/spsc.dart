@@ -177,9 +177,13 @@ final class SpscReceiver<T> extends Receiver<T>
   bool get isRecvClosed => _closed;
 
   @override
-  Stream<T> stream() async* {
+  Stream<T> stream() {
     if (_consumed) throw StateError('Receiver.stream() is single-subscription');
     _consumed = true;
+    return _stream();
+  }
+
+  Stream<T> _stream() async* {
     while (true) {
       switch (await recv()) {
         case RecvOk<T>(value: final v):

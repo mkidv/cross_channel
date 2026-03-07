@@ -17,7 +17,6 @@ lcov.info
 *.iml
 .DS_Store
 Thumbs.db
-WARP.md
 
 # Bench
 bench/
