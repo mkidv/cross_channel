@@ -4,9 +4,7 @@ library;
 import 'dart:async';
 import 'dart:isolate';
 
-import 'package:cross_channel/mpmc.dart';
-import 'package:cross_channel/mpsc.dart';
-import 'package:cross_channel/spsc.dart';
+import 'package:cross_channel/cross_channel.dart';
 import 'package:test/test.dart';
 
 import 'utils.dart';
@@ -160,6 +158,26 @@ void main() {
 
         expect(remoteTx.channelId, -1);
         expect(remoteRx.channelId, -1);
+      });
+      group('XChannel (Factory)', () {
+        test('Sender round-trip', () {
+          final (tx, _) = XChannel.mpsc<int>(metricsId: 'x-metrics');
+          final txData = tx.toTransferable();
+          expect(txData['metricsId'], 'x-metrics');
+
+          // Reconstruct as MpscSender (since it's an MPSC channel)
+          final remoteTx = MpscSender<int>.fromTransferable(txData);
+          expect(remoteTx.channelId, -1);
+        });
+
+        test('Receiver round-trip', () {
+          final (_, rx) = XChannel.mpsc<int>(metricsId: 'x-metrics');
+          final rxData = rx.toTransferable();
+          expect(rxData['metricsId'], 'x-metrics');
+
+          final remoteRx = MpscReceiver<int>.fromTransferable(rxData);
+          expect(remoteRx.channelId, -1);
+        });
       });
     });
   });

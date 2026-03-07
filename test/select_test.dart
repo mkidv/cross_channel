@@ -195,6 +195,39 @@ void main() {
     });
   });
 
+  group('XSelect.stream', () {
+    test('emits select winners until stopWhen', () async {
+      final (tx, rx) = XChannel.mpsc<int>(capacity: 8);
+
+      unawaited(Future<void>(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 4));
+        await tx.send(1);
+        await Future<void>.delayed(const Duration(milliseconds: 4));
+        await tx.send(2);
+        tx.close();
+      }));
+
+      final out = await XSelect.stream<String>(
+        (s) => s
+          ..onRecvValue<int>(rx, (v) => 'msg:$v', onError: (_) => 'closed')
+          ..onTick(const Duration(milliseconds: 2), () => 'tick'),
+        stopWhen: (v) => v == 'closed',
+      ).toList();
+
+      expect(out.where((v) => v.startsWith('msg:')),
+          containsAll(['msg:1', 'msg:2']));
+      expect(out.last, equals('closed'));
+    });
+
+    test('stream can be canceled by take()', () async {
+      final out = await XSelect.stream<int>(
+        (s) => s..onTick(const Duration(milliseconds: 1), () => 1),
+      ).take(3).toList();
+
+      expect(out, equals([1, 1, 1]));
+    });
+  });
+
   group('XSelect.onTimeout/onTick', () {
     test('onTimeout resolves when all branches are pending', () async {
       var timedOut = false;

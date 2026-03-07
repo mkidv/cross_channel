@@ -22,10 +22,39 @@ export 'src/result.dart';
 /// - **MPMC**: Multi-producer, multi-consumer (work-sharing pools)
 /// - **SPSC**: Single-producer, single-consumer (ultra-low latency)
 /// - **OneShot**: Single-value delivery (request/reply patterns)
+/// - **Broadcast**: One-to-many communication (event bus)
 ///
 /// **Usage:**
-/// {@tool snippet example/cross_channel_example.dart}
-/// {@end-tool}
+/// ```dart
+/// import 'package:cross_channel/cross_channel.dart';
+///
+/// Future<void> main() async {
+///   // 1. MPSC (Multi-Producer Single-Consumer)
+///   final (mpscTx, _) = XChannel.mpsc<String>(capacity: 100);
+///   await mpscTx.send('task');
+///
+///   // 2. MPMC (Multi-Producer Multi-Consumer) - cloned receivers
+///   final (mpmcTx, mpmcRx0) = XChannel.mpmc<String>(capacity: 10);
+///   final mpmcRx1 = mpmcRx0.clone();
+///   print('Consumers: $mpmcRx0, $mpmcRx1');
+///   await mpmcTx.send('work');
+///
+///   // 3. OneShot
+///   final (oneTx, oneRx) = XChannel.oneshot<String>();
+///   await oneTx.send('reply');
+///   await oneRx.recv();
+///
+///   // 4. SPSC (Single-Producer Single-Consumer)
+///   final (spscTx, _) = XChannel.spsc<int>(capacity: 1024);
+///   await spscTx.send(42);
+///
+///   // 5. Broadcast
+///   final (bcTx, bcAt) = XChannel.broadcast<String>(capacity: 128);
+///   final sub = bcAt.subscribe(replay: 5);
+///   print('Subscriber created: $sub');
+///   await bcTx.send('announcement');
+/// }
+/// ```
 ///
 /// ## Capacity Rules
 /// - `capacity: null` → Unbounded channel (producers never block)
@@ -51,12 +80,14 @@ final class XChannel {
   /// - [chunked]: Use optimized chunked buffer for hot paths (default: `true`)
   ///
   /// **Usage:**
-  /// {@tool snippet example/cross_channel_example.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// import 'package:cross_channel/cross_channel.dart';
   ///
-  /// **Usage Pattern:**
-  /// {@tool snippet example/cross_channel_example.dart}
-  /// {@end-tool}
+  /// Future<void> main() async {
+  ///   final (mpscTx, _) = XChannel.mpsc<String>(capacity: 100);
+  ///   await mpscTx.send('task');
+  /// }
+  /// ```
   ///
   /// **See also:**
   /// - [XChannel.mpmc] for multi-consumer work distribution
@@ -89,8 +120,16 @@ final class XChannel {
   /// - [chunked]: Use optimized chunked buffer for hot paths (default: `true`)
   ///
   /// **Usage:**
-  /// {@tool snippet example/cross_channel_example.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// import 'package:cross_channel/cross_channel.dart';
+  ///
+  /// Future<void> main() async {
+  ///   final (mpmcTx, mpmcRx0) = XChannel.mpmc<String>(capacity: 10);
+  ///   final mpmcRx1 = mpmcRx0.clone();
+  ///   print('Consumers: $mpmcRx0, $mpmcRx1');
+  ///   await mpmcTx.send('work');
+  /// }
+  /// ```
   ///
   /// **Key Differences from MPSC:**
   /// - Multiple consumers compete for messages (work-stealing)
@@ -125,8 +164,15 @@ final class XChannel {
   ///   If `false`, all receivers observe the same value.
   ///
   /// **Usage:**
-  /// {@tool snippet example/cross_channel_example.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// import 'package:cross_channel/cross_channel.dart';
+  ///
+  /// Future<void> main() async {
+  ///   final (oneTx, oneRx) = XChannel.oneshot<String>();
+  ///   await oneTx.send('reply');
+  ///   await oneRx.recv();
+  /// }
+  /// ```
   ///
   /// **Use Cases:**
   /// - HTTP request/response patterns
@@ -153,8 +199,14 @@ final class XChannel {
   /// - [capacity]: Ring buffer size (will be rounded to next power of 2)
   ///
   /// **Usage:**
-  /// {@tool snippet example/cross_channel_example.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// import 'package:cross_channel/cross_channel.dart';
+  ///
+  /// Future<void> main() async {
+  ///   final (spscTx, _) = XChannel.spsc<int>(capacity: 1024);
+  ///   await spscTx.send(42);
+  /// }
+  /// ```
   ///
   /// **Performance Notes:**
   /// - High-performance channel type (~1.76-1.80 Mops/s, see benchmarks)
@@ -177,8 +229,20 @@ final class XChannel {
   /// **Performance: ~135 Mops/s** - extremely fast due to coalescing.
   ///
   /// **Usage:**
-  /// {@tool snippet example/cross_channel_example.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// import 'package:cross_channel/cross_channel.dart';
+  ///
+  /// Future<void> main() async {
+  ///   final (tx, rx) = XChannel.mpscLatest<double>();
+  ///
+  ///   // New values overwrite pending ones
+  ///   tx.trySend(0.5);
+  ///   tx.trySend(1.0); // 0.5 is dropped if not yet received
+  ///
+  ///   final result = await rx.recv();
+  ///   print('Latest progress: $result'); // Likely 1.0
+  /// }
+  /// ```
   ///
   /// **Use Cases:**
   /// - Progress bars and loading indicators
@@ -199,8 +263,17 @@ final class XChannel {
   /// latest-only work across multiple workers.
   ///
   /// **Usage:**
-  /// {@tool snippet example/cross_channel_example.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// import 'package:cross_channel/cross_channel.dart';
+  ///
+  /// Future<void> main() async {
+  ///   final (tx, rx0) = XChannel.mpmcLatest<String>();
+  ///   final rx1 = rx0.clone();
+  ///
+  ///   tx.trySend('task');
+  ///   // Only one of rx0 or rx1 will receive 'task'
+  /// }
+  /// ```
   ///
   /// **Key Points:**
   /// - Only one consumer gets each update (competitive, not broadcast)
@@ -222,8 +295,16 @@ final class XChannel {
   /// - [capacity]: Buffer size (fixed, power of 2).
   ///
   /// **Usage:**
-  /// {@tool snippet example/cross_channel_example.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// import 'package:cross_channel/cross_channel.dart';
+  ///
+  /// Future<void> main() async {
+  ///   final (bcTx, bcAt) = XChannel.broadcast<String>(capacity: 128);
+  ///   final sub = bcAt.subscribe(replay: 5);
+  ///   print('Subscriber created: $sub');
+  ///   await bcTx.send('announcement');
+  /// }
+  /// ```
   static BroadcastChannel<T> broadcast<T>(
       {required int capacity, String? metricsId}) {
     return Broadcast.channel<T>(capacity, metricsId: metricsId);

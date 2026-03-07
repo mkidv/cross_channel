@@ -89,6 +89,22 @@ void main() {
       expect(merged.recvLastNs, 2500); // max
     });
 
+    test('toTransferable and fromTransferable', () {
+      final snap = ChannelSnapshot(
+        sent: 10,
+        recv: 20,
+        sendP50: 12.5,
+        sendFirstNs: 100,
+      );
+      final map = snap.toTransferable();
+      final back = ChannelSnapshot.fromTransferable(map);
+
+      expect(back.sent, 10);
+      expect(back.recv, 20);
+      expect(back.sendP50, 12.5);
+      expect(back.sendFirstNs, 100);
+    });
+
     test('edge cases for division by zero', () {
       final zeroSnap = ChannelSnapshot();
       expect(zeroSnap.nsByOp, 0);
@@ -113,6 +129,10 @@ void main() {
       expect(gm.trySendOk, 10);
       expect(gm.trySendFail, 2);
       expect(gm.recv, 0);
+      expect(gm.dropped, 0);
+      expect(gm.closed, 0);
+      expect(gm.tryRecvOk, 0);
+      expect(gm.tryRecvEmpty, 0);
     });
 
     test('merge combines channels', () {
@@ -173,6 +193,49 @@ void main() {
     test('export does not crash', () {
       final reg = MetricsRegistry();
       expect(reg.export, returnsNormally);
+    });
+
+    test('behavior when disabled', () {
+      final originalEnabled = MetricsConfig.enabled;
+      MetricsConfig.enabled = false;
+      addTearDown(() => MetricsConfig.enabled = originalEnabled);
+
+      final registry = MetricsRegistry();
+      expect(registry.channelSnapshot('any'), isNull);
+
+      // Should not crash
+      registry.merge('origin', 'id', const ChannelSnapshot());
+      registry.export();
+    });
+  });
+
+  group('MetricsRecorder', () {
+    test('buildMetricsRecorder cases', () {
+      expect(buildMetricsRecorder(null), isA<NoopMetricsRecorder>());
+      expect(buildMetricsRecorder(''), isA<NoopMetricsRecorder>());
+
+      final originalEnabled = MetricsConfig.enabled;
+      MetricsConfig.enabled = false;
+      addTearDown(() => MetricsConfig.enabled = originalEnabled);
+      expect(buildMetricsRecorder('any'), isA<NoopMetricsRecorder>());
+    });
+
+    test('NoopMetricsRecorder exhaustive', () {
+      const nr = NoopMetricsRecorder();
+      expect(nr.startSendTimer(), 0);
+      expect(nr.startRecvTimer(), 0);
+      nr.sendOk(0);
+      nr.recvOk(0);
+      nr.trySendOk(0);
+      nr.trySendFail();
+      nr.tryRecvOk(0);
+      nr.tryRecvEmpty();
+      nr.markWakeOne();
+      nr.markWakeAll();
+      nr.markDropOldest();
+      nr.markDropNewest();
+      nr.markDropBlockTimeout();
+      nr.markClosed();
     });
   });
 
@@ -307,6 +370,68 @@ void main() {
 
       expect(() => exporter.exportSnapshot(gm), returnsNormally);
       expect(() => exporter.exportChannel('ch1', snap), returnsNormally);
+    });
+  });
+
+  group('CsvExporter', () {
+    test('exportSnapshot writes header and global row', () {
+      final buffer = StringBuffer();
+      final exporter = CsvExporter(sink: buffer);
+
+      final gm = GlobalMetrics(DateTime(2024), {
+        'ch1': const ChannelSnapshot(sent: 10, recv: 5),
+      });
+
+      exporter.exportSnapshot(gm);
+
+      final lines = buffer.toString().trim().split('\n');
+      expect(lines.length, 2);
+      expect(lines[0], startsWith('ts,type,id,sent,recv,dropped,closed'));
+      expect(
+          lines[1],
+          contains(
+              '2024-01-01T00:00:00.000,global,,10,5,0,0,0,0,0,0,,,,,,,,,,,,1'));
+    });
+
+    test('exportChannel writes header and channel row', () {
+      final buffer = StringBuffer();
+      final exporter = CsvExporter(sink: buffer);
+
+      const snap =
+          ChannelSnapshot(sent: 10, recv: 5, trySendOk: 8, trySendFail: 2);
+      exporter.exportChannel('test-ch', snap);
+
+      final lines = buffer.toString().trim().split('\n');
+      expect(lines.length, 2);
+      expect(lines[0], startsWith('ts,type,id,sent,recv,dropped,closed'));
+      expect(lines[1], contains(',channel,test-ch,10,5,0,0,8,2,0,0,'));
+    });
+
+    test('escaping csv values', () {
+      final buffer = StringBuffer();
+      final exporter = CsvExporter(sink: buffer);
+
+      exporter.exportChannel('ch,1', const ChannelSnapshot());
+      final lines = buffer.toString().trim().split('\n');
+      expect(lines[1], contains('"ch,1"'));
+    });
+
+    test('formatting numbers', () {
+      final buffer = StringBuffer();
+      final exporter = CsvExporter(sink: buffer);
+
+      const snap = ChannelSnapshot(
+        sent: 10,
+        recv: 10,
+        sendP50: 12.34567,
+        sendP95: double.nan,
+        sendP99: double.infinity,
+      );
+      exporter.exportChannel('fmt', snap);
+
+      final lines = buffer.toString().trim().split('\n');
+      expect(
+          lines[1], contains(',12.346,,')); // P50 formatted, NaN/Inf are empty
     });
   });
 }

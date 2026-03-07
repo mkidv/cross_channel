@@ -2,11 +2,31 @@
 
 ---
 
-## [Unreleased]
+## [0.11.0] - 2026-03-07
 
-### Planned
+### Added
 
-- **Cross-Isolate Event Bus** (future optimization of Broadcast)
+- **`XSelect.stream`**:
+  - Repeats the selection loop and yields and result as a stream.
+  - Supports `stopWhen` predicate to gracefully terminate the loop.
+  - Provides a powerful bridge between `XSelect` ergonomics and reactive streams.
+- **Improved Test Coverage**:
+  - Added `test/core_test.dart` for handshake/flow-control protocols.
+  - Added `test/extensions_test.dart` for deep extension coverage (timeout, batching, etc.).
+  - Added `test/factory_test.dart` for high-level factory validation.
+- **New Tooling**:
+  - `tool/coverage.dart`: New utility to generate and summarize LCOV reports locally.
+
+### Changed
+
+- **Documentation Overhaul**:
+  - Significantly improved examples for `SendResult` and `RecvResult` pattern matching.
+  - Added more exhaustive inline documentation for `XChannel` factory methods.
+
+### Removed
+
+- **Obsolete Snippets Tool**: Removed `tool/snippet.dart` as examples are now maintained directly inline.
+- **Dartdoc Cleanup**: Removed redundant `dartdoc_options.yaml`.
 
 ---
 

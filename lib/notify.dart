@@ -14,8 +14,39 @@ import 'dart:async';
 ///
 /// ## Usage Patterns
 ///
-/// {@tool snippet example/notify_example.dart}
-/// {@end-tool}
+/// ```dart
+/// import 'dart:async';
+///
+/// import 'package:cross_channel/notify.dart';
+///
+/// Future<void> main() async {
+///   final notify = Notify();
+///
+///   // 1. Basic signaling
+///   unawaited(Future.microtask(() async {
+///     final (future, _) = notify.notified();
+///     await future;
+///     print('Worker 1: Received signal');
+///   }));
+///
+///   notify.notifyOne();
+///
+///   // 2. Broadcast signaling
+///   unawaited(Future.microtask(() async {
+///     final (future, _) = notify.notified();
+///     await future;
+///     print('Worker 2: Shutting down');
+///   }));
+///
+///   unawaited(Future.microtask(() async {
+///     final (future, _) = notify.notified();
+///     await future;
+///     print('Worker 3: Shutting down');
+///   }));
+///
+///   notify.notifyAll();
+/// }
+/// ```
 ///
 /// ## When to use Notify vs Channels
 /// - **Use Notify for**: Config changes, shutdown signals, flush commands,
@@ -118,8 +149,20 @@ class Notify {
   /// - "Check your state" broadcast
   ///
   /// **Example:**
-  /// {@tool snippet example/notify_notify_all.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// // ignore_for_file: unused_element
+  ///
+  /// import 'package:cross_channel/notify.dart';
+  ///
+  /// void main() {
+  ///   final shutdownFlag = Notify();
+  ///
+  ///   // Graceful shutdown - wake all workers
+  ///   void initiateShutdown() {
+  ///     shutdownFlag.notifyAll(); // All workers check shutdown state
+  ///   }
+  /// }
+  /// ```
   void notifyAll() {
     if (_closed) return;
     _epoch++;
@@ -152,8 +195,21 @@ class Notify {
   /// All currently waiting tasks will fail with [StateError], and any
   /// future calls to [notified] will return a failed future.
   ///
-  /// {@tool snippet example/notify_close.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// // ignore_for_file: unused_element
+  ///
+  /// import 'package:cross_channel/notify.dart';
+  ///
+  /// Future<void> main() async {
+  ///   final shutdownNotify = Notify();
+  ///
+  ///   // Force shutdown after grace period
+  ///   Future<void> forceShutdown() async {
+  ///     await Future<void>.delayed(Duration(seconds: 30)); // Grace period
+  ///     shutdownNotify.close(); // Force all remaining waiters to fail
+  ///   }
+  /// }
+  /// ```
   void close() {
     if (_closed) return;
     _closed = true;

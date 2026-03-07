@@ -10,6 +10,7 @@ import 'package:web/web.dart';
 /// Essential for background processing in web applications using Web Workers
 /// while maintaining type safety and structured error handling. Integrates
 /// seamlessly with JavaScript's MessageChannel API.
+///
 extension MessagePortRequestX on MessagePort {
   /// Send a structured command to the Web Worker.
   ///
@@ -22,8 +23,16 @@ extension MessagePortRequestX on MessagePort {
   /// - [transfer]: Optional transferable objects (ArrayBuffers, etc.)
   ///
   /// **Usage:**
-  /// {@tool snippet example/web_example.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// import 'package:cross_channel/web_extension.dart';
+  /// import 'package:web/web.dart';
+  ///
+  /// Future<void> main() async {
+  ///   // In Main Thread
+  ///   final result = await worker.request<String>('status');
+  ///   print('Worker status: $result');
+  /// }
+  /// ```
   void sendCmd(
     String command, {
     Map<String, Object?>? data,
@@ -49,9 +58,16 @@ extension MessagePortRequestX on MessagePort {
   /// - [timeout]: Maximum wait time (default: 3 seconds)
   ///
   /// **Usage:**
-  /// {@tool snippet example/web_example.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// import 'package:cross_channel/web_extension.dart';
+  /// import 'package:web/web.dart';
   ///
+  /// Future<void> main() async {
+  ///   // In Main Thread
+  ///   final result = await worker.request<String>('status');
+  ///   print('Worker status: $result');
+  /// }
+  /// ```
   Future<R> request<R>(
     String command, {
     Map<String, Object?>? data,

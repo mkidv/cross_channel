@@ -42,8 +42,11 @@ extension SendPortRequestX on SendPort {
   /// - [timeout]: Maximum time to wait for a response (default: 3 seconds)
   ///
   /// **Usage:**
-  /// {@tool snippet example/isolate_example.dart}
-  /// {@end-tool}
+  /// ```dart
+  /// // Main isolate
+  /// final result = await workerPort.request<int>('calculateSum', data: {'a': 1, 'b': 2});
+  /// print('Result: $result');
+  /// ```
   ///
   Future<R> request<R>(
     String command, {

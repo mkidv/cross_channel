@@ -37,8 +37,32 @@ typedef OneShotChannel<T> = (OneShotSender<T>, OneShotReceiver<T>);
 /// - Perfect for initialization values or shared results
 ///
 /// ## Example
-/// {@tool snippet example/oneshot_example.dart}
-/// {@end-tool}
+/// ```dart
+/// import 'dart:async';
+///
+/// import 'package:cross_channel/oneshot.dart';
+///
+/// Future<void> main() async {
+///   // 1. Create a one-shot promise channel
+///   // `consumeOnce: true` means only the first receiver gets the value.
+///   final (responseTx, responseRx) = OneShot.channel<String>(consumeOnce: true);
+///
+///   // 2. Server Side (Promise resolution)
+///   unawaited(Future.microtask(() async {
+///     // Send exactly one response
+///     await responseTx.send('Operation completed successfully');
+///   }));
+///
+///   // 3. Client Side
+///   final result = await responseRx.recv();
+///
+///   if (result is RecvOk<String>) {
+///     print('Response: ${result.value}');
+///   } else if (result is RecvErrorDisconnected) {
+///     print('Server disconnected without answering');
+///   }
+/// }
+/// ```
 class OneShot {
   static OneShotChannel<T> channel<T>({
     bool consumeOnce = false,

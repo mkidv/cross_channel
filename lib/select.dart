@@ -19,8 +19,23 @@ import 'package:cross_channel/src/core.dart';
 /// ## Usage Patterns
 ///
 /// **Responsive UI with timeout:**
-/// {@tool snippet example/select_example.dart}
-/// {@end-tool}
+/// ```dart
+/// import 'dart:async';
+///
+/// import 'package:cross_channel/cross_channel.dart';
+///
+/// Future<void> main() async {
+///   final dataChannel = XChannel.mpsc<String>().$2;
+///
+///   // Responsive UI with timeout
+///   final result = await XSelect.run<String>((s) => s
+///     ..onRecvValue(dataChannel, (data) => 'got_data: $data')
+///     ..onTick(const Duration(seconds: 1), () => 'heartbeat')
+///     ..onTimeout(const Duration(seconds: 30), () => 'timeout_reached'));
+///
+///   print(result);
+/// }
+/// ```
 ///
 /// **Multi-source event aggregation:**
 /// ```dart
@@ -126,6 +141,33 @@ class XSelect {
           c(b);
         }
       }, ordered: ordered);
+
+  /// Repeats [run] and exposes each winning branch result as a stream.
+  ///
+  /// This is useful for event loops where you want `XSelect` ergonomics but
+  /// consume outcomes with `await for` / stream operators.
+  ///
+  /// **Behavior:**
+  /// - Rebuilds branches on every iteration (via [build]).
+  /// - Emits one value per select round.
+  /// - Stops when [stopWhen] returns `true` for an emitted value, or when the
+  ///   consumer cancels the stream subscription.
+  static Stream<R> stream<R>(
+    void Function(SelectBuilder<R>) build, {
+    bool ordered = false,
+    bool Function(R value)? stopWhen,
+  }) async* {
+    bool running = true;
+
+    while (running) {
+      final value = await run<R>(build, ordered: ordered);
+      yield value;
+      if (stopWhen?.call(value) ?? false) {
+        running = false;
+        return;
+      }
+    }
+  }
 }
 
 /// Builder for composing async selections with type-safe operations.
@@ -376,7 +418,13 @@ class SelectBuilder<R> {
         return onError(result.error);
       }
       return Future<R>.error(StateError('Unexpected RecvResult: $result'));
-    }, tag: tag, if_: if_ ?? () => !rx.recvDisconnected);
+    },
+        tag: tag,
+        if_: if_ ??
+            () {
+              if (!rx.recvDisconnected) return true;
+              return onDisconnected != null || onError != null;
+            });
   }
 
   /// Race a channel receiver - only handle error messages.
@@ -404,7 +452,7 @@ class SelectBuilder<R> {
         return body(result.error);
       }
       return Future<R>.error(StateError('Unexpected RecvResult: $result'));
-    }, tag: tag, if_: if_ ?? () => !rx.recvDisconnected);
+    }, tag: tag, if_: if_ ?? () => true);
   }
 
   /// Wait for a channel send operation to complete.

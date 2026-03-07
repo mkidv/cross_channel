@@ -384,6 +384,25 @@ Notes:
 - `syncRun` only uses immediate arms, aka non blocking
 - Use **`if_`** to conditionally include a branch without rebuilding the selection.
 
+### 🔄 Select Stream
+
+New in `0.11.0`, `XSelect.stream` allows you to repeat the selection logic and yield each winning result as a stream. This is perfect for long-running event loops.
+
+```dart
+final events = XSelect.stream<AppEvent>((s) => s
+  ..onRecvValue(userCommands, (cmd) => AppEvent.user(cmd))
+  ..onStream(networkData, (data) => AppEvent.network(data))
+  ..onTick(Duration(seconds: 1), () => AppEvent.heartbeat())
+
+  // Optional: stop the stream when a specific condition is met
+  , stopWhen: (event) => event is ShutdownEvent,
+);
+
+await for (final event in events) {
+  process(event);
+}
+```
+
 ## 🔗 Interop
 
 ### Stream
