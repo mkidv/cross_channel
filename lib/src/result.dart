@@ -130,9 +130,10 @@ final class SendErrorDisconnected extends SendError {
 /// }
 /// ```
 final class SendErrorTimeout extends SendError {
+  const SendErrorTimeout(this.limit);
+
   /// The timeout duration that was exceeded.
   final Duration limit;
-  const SendErrorTimeout(this.limit);
 }
 
 /// Send operation failed due to an unexpected exception.
@@ -140,9 +141,10 @@ final class SendErrorTimeout extends SendError {
 /// This is a rare case that indicates an internal error or resource exhaustion.
 /// The [cause] contains the original exception for debugging.
 final class SendErrorFailed extends SendError {
+  const SendErrorFailed(this.cause);
+
   /// The original exception that caused the failure.
   final Object cause;
-  const SendErrorFailed(this.cause);
 }
 
 /// Result of a channel receive operation.
@@ -170,9 +172,10 @@ sealed class RecvResult<T> {
 /// }
 /// ```
 final class RecvOk<T> extends RecvResult<T> {
+  const RecvOk(this.value);
+
   /// The value that was received from the channel.
   final T value;
-  const RecvOk(this.value);
 }
 
 /// Base class for receive operation errors.
@@ -241,9 +244,10 @@ final class RecvErrorDisconnected extends RecvError {
 /// }
 /// ```
 final class RecvErrorTimeout extends RecvError {
+  const RecvErrorTimeout(this.limit);
+
   /// The timeout duration that was exceeded.
   final Duration limit;
-  const RecvErrorTimeout(this.limit);
 }
 
 /// Receive operation failed due to an unexpected exception.
@@ -251,9 +255,10 @@ final class RecvErrorTimeout extends RecvError {
 /// This is a rare case that indicates an internal error.
 /// The [cause] contains the original exception for debugging.
 final class RecvErrorFailed extends RecvError {
+  const RecvErrorFailed(this.cause);
+
   /// The original exception that caused the failure.
   final Object cause;
-  const RecvErrorFailed(this.cause);
 }
 
 /// Convenient boolean checks for [SendResult].

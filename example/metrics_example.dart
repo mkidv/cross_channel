@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:cross_channel/cross_channel.dart';
 import 'package:cross_channel/metrics.dart';
 

@@ -15,9 +15,9 @@ PlatformPort unpackPlatformPort(Object raw) => _WebPort(raw as web.MessagePort);
 
 /// A PlatformReceiver backed by a MessageChannel (or a single MessagePort).
 class _WebMessageReceiver implements PlatformReceiver {
-  final web.MessageChannel _channel;
-
   _WebMessageReceiver() : _channel = web.MessageChannel();
+
+  final web.MessageChannel _channel;
 
   // On Web, the "sendPort" equivalent is the other end of the MessageChannel.
   // We give away port2 to be sent to remote contexts.
@@ -55,9 +55,9 @@ Stream<Object?> _createMessageStream(web.MessagePort port) {
 }
 
 class _WebPort implements PlatformPort {
-  final web.MessagePort _port;
-
   _WebPort(this._port);
+
+  final web.MessagePort _port;
 
   @override
   void send(Object? message) {

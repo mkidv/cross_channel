@@ -1,6 +1,16 @@
 /// P² multi-quantiles (Jain & Chlamtac, 1985)
 /// Single sketch that tracks multiple quantiles by sharing markers.
 final class P2Quantiles {
+  // bootstrap buffer (first m samples)
+  P2Quantiles(Iterable<double> ps)
+      : probs = List<double>.from(ps, growable: false) {
+    assert(probs.isNotEmpty, 'Probs is empty');
+    for (final p in probs) {
+      assert(p > 0.0 && p < 1.0, 'Each p must satisfy 0 < p < 1');
+    }
+    _initMarkerLayout();
+  }
+
   /// Quantiles requested by the caller (e.g. [0.5, 0.95, 0.99]).
   final List<double> probs;
 
@@ -14,16 +24,7 @@ final class P2Quantiles {
 
   bool _ready = false; // becomes true after bootstrap
   int _count = 0; // number of ingested samples
-  final List<double> _boot = <double>[]; // bootstrap buffer (first m samples)
-
-  P2Quantiles(Iterable<double> ps)
-      : probs = List<double>.from(ps, growable: false) {
-    assert(probs.isNotEmpty, 'Probs is empty');
-    for (final p in probs) {
-      assert(p > 0.0 && p < 1.0, 'Each p must satisfy 0 < p < 1');
-    }
-    _initMarkerLayout();
-  }
+  final List<double> _boot = <double>[];
 
   /// Number of samples ingested.
   int get count => _count;

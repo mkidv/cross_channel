@@ -40,12 +40,6 @@ final class ChannelMetrics {
 }
 
 final class ChannelSnapshot {
-  final int sent, recv, dropped, closed;
-  final int trySendOk, trySendFail, tryRecvOk, tryRecvEmpty;
-  final double? sendP50, sendP95, sendP99;
-  final double? recvP50, recvP95, recvP99;
-  final int recvFirstNs, recvLastNs;
-  final int sendFirstNs, sendLastNs;
   const ChannelSnapshot({
     this.sent = 0,
     this.recv = 0,
@@ -66,27 +60,6 @@ final class ChannelSnapshot {
     this.sendFirstNs = 0,
     this.sendLastNs = 0,
   });
-
-  Map<String, Object?> toTransferable() => {
-        'sent': sent,
-        'recv': recv,
-        'dropped': dropped,
-        'closed': closed,
-        'trySendOk': trySendOk,
-        'trySendFail': trySendFail,
-        'tryRecvOk': tryRecvOk,
-        'tryRecvEmpty': tryRecvEmpty,
-        if (sendP50 != null) 'sendP50': sendP50,
-        if (sendP95 != null) 'sendP95': sendP95,
-        if (sendP99 != null) 'sendP99': sendP99,
-        if (recvP50 != null) 'recvP50': recvP50,
-        if (recvP95 != null) 'recvP95': recvP95,
-        if (recvP99 != null) 'recvP99': recvP99,
-        'recvFirstNs': recvFirstNs,
-        'recvLastNs': recvLastNs,
-        'sendFirstNs': sendFirstNs,
-        'sendLastNs': sendLastNs,
-      };
 
   factory ChannelSnapshot.fromTransferable(Map<Object?, Object?> map) =>
       ChannelSnapshot(
@@ -109,6 +82,34 @@ final class ChannelSnapshot {
         sendFirstNs: map['sendFirstNs'] as int? ?? 0,
         sendLastNs: map['sendLastNs'] as int? ?? 0,
       );
+
+  final int sent, recv, dropped, closed;
+  final int trySendOk, trySendFail, tryRecvOk, tryRecvEmpty;
+  final double? sendP50, sendP95, sendP99;
+  final double? recvP50, recvP95, recvP99;
+  final int recvFirstNs, recvLastNs;
+  final int sendFirstNs, sendLastNs;
+
+  Map<String, Object?> toTransferable() => {
+        'sent': sent,
+        'recv': recv,
+        'dropped': dropped,
+        'closed': closed,
+        'trySendOk': trySendOk,
+        'trySendFail': trySendFail,
+        'tryRecvOk': tryRecvOk,
+        'tryRecvEmpty': tryRecvEmpty,
+        if (sendP50 != null) 'sendP50': sendP50,
+        if (sendP95 != null) 'sendP95': sendP95,
+        if (sendP99 != null) 'sendP99': sendP99,
+        if (recvP50 != null) 'recvP50': recvP50,
+        if (recvP95 != null) 'recvP95': recvP95,
+        if (recvP99 != null) 'recvP99': recvP99,
+        'recvFirstNs': recvFirstNs,
+        'recvLastNs': recvLastNs,
+        'sendFirstNs': sendFirstNs,
+        'sendLastNs': sendLastNs,
+      };
 
   ChannelSnapshot merge(ChannelSnapshot other) {
     return ChannelSnapshot(
@@ -189,10 +190,10 @@ final class ChannelSnapshot {
 }
 
 final class GlobalMetrics {
+  const GlobalMetrics(this.ts, this.channels);
+
   final DateTime ts;
   final Map<String, ChannelSnapshot> channels;
-
-  const GlobalMetrics(this.ts, this.channels);
 
   GlobalMetrics merge(GlobalMetrics other) {
     final mergedChannels = Map<String, ChannelSnapshot>.from(channels);

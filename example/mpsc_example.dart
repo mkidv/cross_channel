@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:cross_channel/mpsc.dart';
 
 Future<void> main() async {

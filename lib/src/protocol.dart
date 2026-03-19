@@ -39,10 +39,10 @@ sealed class ControlMessage {
 /// Request sent by a remote Receiver to the channel owner (ChannelCore)
 /// to initiate a data stream subscription.
 final class ConnectRecvRequest extends ControlMessage {
+  const ConnectRecvRequest(this.replyPort, this.initialCredits);
+
   final PlatformPort replyPort;
   final int initialCredits;
-
-  const ConnectRecvRequest(this.replyPort, this.initialCredits);
 
   @override
   Map<String, Object?> toTransferable() => {
@@ -55,8 +55,10 @@ final class ConnectRecvRequest extends ControlMessage {
 /// Request sent by a remote Sender to the channel owner (ChannelCore)
 /// to initiate a flow-controlled session (sending credits).
 final class ConnectSenderRequest extends ControlMessage {
-  final PlatformPort replyPort; // Where to send FlowCredits
+  // Where to send FlowCredits
   const ConnectSenderRequest(this.replyPort);
+
+  final PlatformPort replyPort;
 
   @override
   Map<String, Object?> toTransferable() => {
@@ -84,9 +86,9 @@ final class Disconnect extends ControlMessage {
 /// Wrapper for batched data messages (used by proxy loop for throughput).
 /// The receiver should unwrap and process each element.
 final class BatchMessage<T> extends ControlMessage {
-  final List<T> values;
-
   const BatchMessage(this.values);
+
+  final List<T> values;
 
   @override
   Map<String, Object?> toTransferable() => {
@@ -98,9 +100,9 @@ final class BatchMessage<T> extends ControlMessage {
 /// Credits sent by receiver to sender for backpressure control.
 /// Sender should only send up to [credits] messages before waiting for more.
 final class FlowCredit extends ControlMessage {
-  final int credits;
-
   const FlowCredit(this.credits);
+
+  final int credits;
 
   @override
   Map<String, Object?> toTransferable() => {
@@ -111,11 +113,11 @@ final class FlowCredit extends ControlMessage {
 
 /// Syncs metrics from a remote sender/receiver to the channel's parent isolate.
 final class MetricsSync extends ControlMessage {
+  const MetricsSync(this.metricsId, this.originId, this.snapshot);
+
   final String metricsId;
   final String originId;
   final ChannelSnapshot snapshot;
-
-  const MetricsSync(this.metricsId, this.originId, this.snapshot);
 
   @override
   Map<String, Object?> toTransferable() => {

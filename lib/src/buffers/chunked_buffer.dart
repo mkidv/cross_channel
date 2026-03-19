@@ -18,20 +18,6 @@ final class ChunkedBuffer<T> implements ChannelBuffer<T> {
     _ringMask = hotCapacityPow2 - 1;
   }
 
-  final int hotCapacityPow2;
-  final int chunkCapacityPow2;
-  final int rebalanceBatch;
-  final int rebalanceThresholdDiv;
-  final int minChunkGateDiv;
-
-  late List<T?> _ring;
-  late int _ringMask;
-  int _head = 0, _tail = 0;
-
-  // overflow queue
-  final ListQueue<_Chunk<T>> _ov = ListQueue<_Chunk<T>>();
-  final _waiters = PopWaiterQueue<T>();
-
   factory ChunkedBuffer.forBurst(int burst,
       {int? rebalanceBatch,
       bool halfChunk = false,
@@ -47,6 +33,20 @@ final class ChunkedBuffer<T> implements ChannelBuffer<T> {
       minChunkGateDiv: minChunkGateDiv ?? 2,
     );
   }
+
+  final int hotCapacityPow2;
+  final int chunkCapacityPow2;
+  final int rebalanceBatch;
+  final int rebalanceThresholdDiv;
+  final int minChunkGateDiv;
+
+  late List<T?> _ring;
+  late int _ringMask;
+  int _head = 0, _tail = 0;
+
+  // overflow queue
+  final ListQueue<_Chunk<T>> _ov = ListQueue<_Chunk<T>>();
+  final _waiters = PopWaiterQueue<T>();
 
   @pragma('vm:prefer-inline')
   bool get _ringEmpty => _head == _tail;

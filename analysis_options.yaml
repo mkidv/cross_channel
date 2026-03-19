@@ -21,14 +21,18 @@ analyzer:
 
 linter:
   rules:
+    - always_declare_return_types
     - always_use_package_imports
     - avoid_dynamic_calls
+    - avoid_print
     - avoid_redundant_argument_values
     - collection_methods_unrelated_type
     - literal_only_boolean_expressions
     - prefer_final_fields
     - prefer_final_locals
     - prefer_single_quotes
+    - sort_constructors_first
+    - sort_unnamed_constructors_first
     - unawaited_futures
     - await_only_futures
     - avoid_void_async
@@ -36,4 +40,3 @@ linter:
     - directives_ordering
     - unnecessary_parenthesis
     - unnecessary_lambdas
-

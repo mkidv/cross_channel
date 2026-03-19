@@ -61,10 +61,10 @@ typedef BroadcastChannel<T> = (BroadcastSender<T>, Broadcast<T>);
 /// }
 /// ```
 final class Broadcast<T> {
+  Broadcast._(this._buffer, this._channelId);
+
   final BroadcastRing<T> _buffer;
   final int _channelId;
-
-  Broadcast._(this._buffer, this._channelId);
 
   /// Creates a Broadcast channel with a fixed [capacity] (must be power-of-two).
   ///

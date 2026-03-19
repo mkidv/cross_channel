@@ -116,8 +116,6 @@ final class CsvExporter extends MetricsExporter {
     final out = sink;
     if (out != null) {
       out.writeln(line);
-    } else {
-      print(line);
     }
   }
 }

@@ -28,8 +28,9 @@ class _IoReceiver implements PlatformReceiver {
 }
 
 class _IoPort implements PlatformPort {
-  final SendPort _sp;
   _IoPort(this._sp);
+
+  final SendPort _sp;
 
   @override
   @pragma('vm:prefer-inline')

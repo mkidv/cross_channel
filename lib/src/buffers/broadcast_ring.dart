@@ -173,6 +173,7 @@ final class BroadcastRing<T> implements ChannelBuffer<T> {
 }
 
 class _BroadcastCursor<T> {
-  int seq;
   _BroadcastCursor(this.seq);
+
+  int seq;
 }

@@ -10,18 +10,6 @@ import 'package:cross_channel/src/result.dart';
 /// Provides common functionality for both fire-and-forget and flow-controlled
 /// connections. Subclass [FlowControlledRemoteConnection] for backpressure.
 class RemoteConnection<T> {
-  RemoteConnection._({
-    required PlatformPort targetPort,
-    ChannelBuffer<T>? localBuffer,
-  })  : _targetPort = targetPort,
-        _localBuffer = localBuffer;
-
-  PlatformPort _targetPort;
-  final ChannelBuffer<T>? _localBuffer;
-  PlatformReceiver? _receiver;
-  StreamSubscription<Object?>? _subscription;
-  bool _closed = false;
-
   /// Creates a connection for sending to a remote channel.
   factory RemoteConnection.forSender(PlatformPort targetPort) {
     return RemoteConnection._(targetPort: targetPort);
@@ -37,6 +25,18 @@ class RemoteConnection<T> {
     conn._setupListener((port) => ConnectRecvRequest(port, 0).toTransferable());
     return conn;
   }
+
+  RemoteConnection._({
+    required PlatformPort targetPort,
+    ChannelBuffer<T>? localBuffer,
+  })  : _targetPort = targetPort,
+        _localBuffer = localBuffer;
+
+  PlatformPort _targetPort;
+  final ChannelBuffer<T>? _localBuffer;
+  PlatformReceiver? _receiver;
+  StreamSubscription<Object?>? _subscription;
+  bool _closed = false;
 
   PlatformPort get targetPort => _targetPort;
   ChannelBuffer<T>? get buffer => _localBuffer;
@@ -118,44 +118,6 @@ class RemoteConnection<T> {
 ///
 /// Prevents OOM on slow consumers. Receiver grants credits after consumption.
 class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
-  FlowControlledRemoteConnection._({
-    required super.targetPort,
-    required int initialCredits,
-    required int creditBatchSize,
-    PlatformPort? creditPort,
-    super.localBuffer,
-  })  : _credits = initialCredits,
-        _creditBatchSize = creditBatchSize,
-        _creditPort = creditPort,
-        super._();
-
-  static const defaultInitialCredits = 65536;
-  static const defaultCreditBatchSize = 1024;
-  static const defaultBoundedCapacity = 65536;
-
-  final int _creditBatchSize;
-  int _credits;
-  int _consumedSinceAck = 0;
-  PlatformPort? _creditPort;
-  int _pendingAcks = 0;
-  Completer<void>? _creditWaiter;
-
-  int get credits => _credits;
-
-  factory FlowControlledRemoteConnection.forSender(
-    PlatformPort targetPort, {
-    int initialCredits = 0,
-    int creditBatchSize = defaultCreditBatchSize,
-  }) {
-    final conn = FlowControlledRemoteConnection<T>._(
-      targetPort: targetPort,
-      initialCredits: initialCredits,
-      creditBatchSize: creditBatchSize,
-    );
-    conn._setupListener((port) => ConnectSenderRequest(port).toTransferable());
-    return conn;
-  }
-
   factory FlowControlledRemoteConnection.forReceiver(
     PlatformPort targetPort, {
     int capacity = defaultBoundedCapacity,
@@ -188,6 +150,44 @@ class FlowControlledRemoteConnection<T> extends RemoteConnection<T> {
         (port) => ConnectRecvRequest(port, initCredits).toTransferable());
     return conn;
   }
+
+  factory FlowControlledRemoteConnection.forSender(
+    PlatformPort targetPort, {
+    int initialCredits = 0,
+    int creditBatchSize = defaultCreditBatchSize,
+  }) {
+    final conn = FlowControlledRemoteConnection<T>._(
+      targetPort: targetPort,
+      initialCredits: initialCredits,
+      creditBatchSize: creditBatchSize,
+    );
+    conn._setupListener((port) => ConnectSenderRequest(port).toTransferable());
+    return conn;
+  }
+
+  FlowControlledRemoteConnection._({
+    required super.targetPort,
+    required int initialCredits,
+    required int creditBatchSize,
+    PlatformPort? creditPort,
+    super.localBuffer,
+  })  : _credits = initialCredits,
+        _creditBatchSize = creditBatchSize,
+        _creditPort = creditPort,
+        super._();
+
+  static const defaultInitialCredits = 65536;
+  static const defaultCreditBatchSize = 1024;
+  static const defaultBoundedCapacity = 65536;
+
+  final int _creditBatchSize;
+  int _credits;
+  int _consumedSinceAck = 0;
+  PlatformPort? _creditPort;
+  int _pendingAcks = 0;
+  Completer<void>? _creditWaiter;
+
+  int get credits => _credits;
 
   @override
   Future<void> onMessage(Object? msg) async {

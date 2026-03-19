@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 part of '../exporters.dart';
 
 final class StdExporter extends MetricsExporter {

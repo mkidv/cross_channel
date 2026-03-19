@@ -622,12 +622,12 @@ extension SenderRateLimitX<T> on Sender<T> {
 }
 
 final class _ThrottleSender<T> extends Sender<T> implements Closeable {
+  _ThrottleSender(this._inner, this._duration, {this.metricsId});
+
   final Sender<T> _inner;
   final Duration _duration;
   @override
   final String? metricsId;
-
-  _ThrottleSender(this._inner, this._duration, {this.metricsId});
 
   int _lastSend = 0;
 
@@ -674,12 +674,12 @@ final class _ThrottleSender<T> extends Sender<T> implements Closeable {
 }
 
 final class _DebounceSender<T> extends Sender<T> implements Closeable {
+  _DebounceSender(this._inner, this._duration, {this.metricsId});
+
   final Sender<T> _inner;
   final Duration _duration;
   @override
   final String? metricsId;
-
-  _DebounceSender(this._inner, this._duration, {this.metricsId});
 
   Timer? _timer;
 

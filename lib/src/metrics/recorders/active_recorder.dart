@@ -1,10 +1,11 @@
 part of '../recorders.dart';
 
 final class ActiveMetricsRecorder implements MetricsRecorder {
-  final ChannelMetrics m;
-  int _rng = 0x9E3779B9; // LCG 32-bit
-
+  // LCG 32-bit
   ActiveMetricsRecorder(this.m);
+
+  final ChannelMetrics m;
+  int _rng = 0x9E3779B9;
 
   @pragma('vm:prefer-inline')
   bool _shouldSample() {

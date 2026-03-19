@@ -2,9 +2,11 @@ import 'package:cross_channel/src/metrics/config.dart';
 import 'package:cross_channel/src/metrics/core.dart';
 
 class MetricsRegistry {
-  static final MetricsRegistry _i = MetricsRegistry._();
-  MetricsRegistry._();
   factory MetricsRegistry() => _i;
+
+  MetricsRegistry._();
+
+  static final MetricsRegistry _i = MetricsRegistry._();
 
   final Map<String, ChannelMetrics> _map = {};
   final Map<String, Map<String, ChannelSnapshot>> _externals = {};
